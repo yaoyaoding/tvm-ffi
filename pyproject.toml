@@ -112,9 +112,18 @@ sdist.exclude = ["**/.git", "**/.github", "**/__pycache__", "**/*.pyc", "build",
 testpaths = ["tests"]
 
 [tool.black]
-exclude = "3rdparty/*"
 line-length = 100
 skip-magic-trailing-comma = true
+
+exclude = '''
+/(
+    \.venv
+  | build
+  | docs
+  | dist
+  | 3rdparty/*
+)/
+'''
 
 [tool.isort]
 profile = "black"

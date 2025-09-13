@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -12,40 +13,29 @@
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations.
-# order matters here so we need to skip isort here
-# isort: skip_file
+# specific language governing permissions and limitations
+# under the License.
 
-from .base import _LIB
-from . import _ffi_api
+set -euxo pipefail
 
+cleanup()
+{
+  rm -rf /tmp/$$.*
+}
+trap cleanup 0
 
-def add_one(x, y):
-    """
-    Adds one to the input tensor.
+function run_lint {
+  echo "Checking file types..."
+  python tests/lint/check_file_type.py
 
-    Parameters
-    ----------
-    x : Tensor
-      The input tensor.
-    y : Tensor
-      The output tensor.
-    """
-    return _LIB.add_one(x, y)
+  echo "Checking ASF headers..."
+  python tests/lint/check_asf_header.py --check
 
+  echo "black check..."
+  black . --check --diff
 
-def raise_error(msg):
-    """
-    Raises an error with the given message.
+  echo "clang-format check..."
+  tests/lint/git-clang-format.sh
+}
 
-    Parameters
-    ----------
-    msg : str
-        The message to raise the error with.
-
-    Raises
-    ------
-    RuntimeError
-        The error raised by the function.
-    """
-    return _ffi_api.raise_error(msg)
+run_lint

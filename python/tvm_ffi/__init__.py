@@ -15,6 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 """TVM FFI Python package."""
+# order matters here so we need to skip isort here
+# isort: skip_file
 # base always go first to load the libtvm_ffi
 from . import base
 from . import libinfo

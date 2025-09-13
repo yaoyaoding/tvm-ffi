@@ -12,40 +12,19 @@
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 # KIND, either express or implied.  See the License for the
-# specific language governing permissions and limitations.
-# order matters here so we need to skip isort here
-# isort: skip_file
+# specific language governing permissions and limitations
+# under the License.
 
-from .base import _LIB
-from . import _ffi_api
-
-
-def add_one(x, y):
-    """
-    Adds one to the input tensor.
-
-    Parameters
-    ----------
-    x : Tensor
-      The input tensor.
-    y : Tensor
-      The output tensor.
-    """
-    return _LIB.add_one(x, y)
-
-
-def raise_error(msg):
-    """
-    Raises an error with the given message.
-
-    Parameters
-    ----------
-    msg : str
-        The message to raise the error with.
-
-    Raises
-    ------
-    RuntimeError
-        The error raised by the function.
-    """
-    return _ffi_api.raise_error(msg)
+repos:
+  # Standard hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-symlinks
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: requirements-txt-fixer
+      - id: trailing-whitespace
