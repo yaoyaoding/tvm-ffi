@@ -14,9 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations.
 # Base logic to load library for extension package
-import tvm_ffi
 import os
 import sys
+
+import tvm_ffi
 
 
 def _load_lib():

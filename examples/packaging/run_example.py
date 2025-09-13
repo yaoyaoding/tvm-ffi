@@ -14,9 +14,10 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations.
 # Base logic to load library for extension package
-import torch
 import sys
+
 import my_ffi_extension
+import torch
 
 
 def run_add_one():

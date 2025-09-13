@@ -20,7 +20,6 @@ import sys
 
 import tomli
 
-
 os.environ["TVM_FFI_BUILD_DOCS"] = "1"
 
 build_exhale = os.environ.get("BUILD_CPP_DOCS", "0") == "1"

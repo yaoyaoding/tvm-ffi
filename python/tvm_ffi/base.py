@@ -17,10 +17,10 @@
 # coding: utf-8
 """Base library for TVM FFI."""
 import ctypes
+import logging
 import os
 import sys
-import subprocess
-import logging
+
 from . import libinfo
 
 logger = logging.getLogger(__name__)

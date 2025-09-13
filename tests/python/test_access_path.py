@@ -15,8 +15,8 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import pytest
-from tvm_ffi.access_path import AccessPath, AccessKind
+
+from tvm_ffi.access_path import AccessKind, AccessPath
 
 
 def test_root_path():

@@ -15,9 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import pytest
 import pickle
+
 import numpy as np
+import pytest
+
 import tvm_ffi
 
 
@@ -79,7 +81,3 @@ def test_dtype_with_lanes(dtype_str):
     assert dtype_with_lanes.type_code == dtype.type_code
     assert dtype_with_lanes.bits == dtype.bits
     assert dtype_with_lanes.lanes == 4
-
-
-if __name__ == "__main__":
-    tvm.testing.main()

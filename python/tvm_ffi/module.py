@@ -18,9 +18,8 @@
 # pylint: disable=invalid-name
 
 from enum import IntEnum
-from . import _ffi_api
 
-from . import core
+from . import _ffi_api, core
 from .registry import register_object
 
 __all__ = ["Module", "ModulePropertyMask", "system_lib", "load_module"]

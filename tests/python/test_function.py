@@ -15,10 +15,12 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import gc
 import ctypes
+import gc
 import sys
+
 import numpy as np
+
 import tvm_ffi
 
 
@@ -182,15 +184,15 @@ def test_rvalue_ref():
         x = tvm_ffi.convert([1, 2])
         assert use_count(x) == 1
         f(x, 2)
-        y = f(x._move(), 1)
-        assert x.__ctypes_handle__().value == None
+        f(x._move(), 1)
+        assert x.__ctypes_handle__().value is None
 
     def check1():
         x = tvm_ffi.convert([1, 2])
         assert use_count(x) == 1
         y = f(x, 2)
-        z = f(x._move(), 2)
-        assert x.__ctypes_handle__().value == None
+        f(x._move(), 2)
+        assert x.__ctypes_handle__().value is None
         assert y.__ctypes_handle__().value is not None
 
     check0()

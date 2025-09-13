@@ -15,11 +15,11 @@
 # specific language governing permissions and limitations
 # under the License.
 """Helper tool to add ASF header to files that cannot be handled by Rat."""
-import os
-import sys
 import argparse
-import subprocess
 import fnmatch
+import os
+import subprocess
+import sys
 
 header_cstyle = """
 /*
@@ -229,7 +229,7 @@ def check_header(fname, header):
 
     if not has_asf_header:
         print(f"ERROR: Missing ASF header in {fname}")
-        print(f"Run `python check_asf_header.py --fix` to add the header")
+        print("Run `python check_asf_header.py --fix` to add the header")
         return False
 
     if has_copyright:
@@ -294,8 +294,6 @@ def add_header(fname, header):
 
     with open(fname, "w") as outfile:
         skipline = False
-        ext = os.path.splitext(fname)[1][1:]
-
         if not lines:
             skipline = False  # File is enpty
         elif lines[0][:2] == "#!":

@@ -37,10 +37,12 @@ Summary of some takeaways:
 
 """
 import os
-import torch
-import numpy as np
-import tvm_ffi
 import time
+
+import numpy as np
+import torch
+
+import tvm_ffi
 
 
 def print_speed(name, speed):

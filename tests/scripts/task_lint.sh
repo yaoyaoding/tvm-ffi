@@ -31,8 +31,14 @@ function run_lint {
   echo "Checking ASF headers..."
   python tests/lint/check_asf_header.py --check
 
+  echo "isort check..."
+  isort --check --diff .
+
   echo "black check..."
-  black . --check --diff
+  black --check --diff .
+
+  echo "ruff check..."
+  ruff check --diff .
 
   echo "clang-format check..."
   tests/lint/git-clang-format.sh

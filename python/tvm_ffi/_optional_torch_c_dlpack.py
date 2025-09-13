@@ -30,6 +30,7 @@ This module will load slowly at first time due to JITing,
 subsequent calls will be much faster.
 """
 import warnings
+
 from . import libinfo
 
 

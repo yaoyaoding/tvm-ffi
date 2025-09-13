@@ -15,18 +15,18 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Sequence, Optional, Mapping
-import os
-import sys
+import functools
 import glob
 import hashlib
+import os
 import shutil
 import subprocess
-import functools
+import sys
+from typing import Mapping, Optional, Sequence
 
+from tvm_ffi.libinfo import find_dlpack_include_path, find_include_path, find_libtvm_ffi
 from tvm_ffi.module import Module, load_module
 from tvm_ffi.utils import FileLock
-from tvm_ffi.libinfo import find_include_path, find_dlpack_include_path, find_libtvm_ffi
 
 IS_WINDOWS = sys.platform == "win32"
 

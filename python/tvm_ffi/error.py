@@ -16,10 +16,11 @@
 # under the License.
 # pylint: disable=invalid-name
 """Error handling."""
-import re
-import types
-import sys
 import ast
+import re
+import sys
+import types
+
 from . import core
 
 

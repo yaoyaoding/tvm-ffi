@@ -19,10 +19,9 @@
 # if we also want to expose a tensor function in the root namespace
 
 from numbers import Integral
-from . import core
+
+from . import _ffi_api, core, registry
 from .core import Device, DLDeviceType, Tensor, from_dlpack
-from . import registry
-from . import _ffi_api
 
 
 @registry.register_object("ffi.Shape")
@@ -79,10 +78,4 @@ def device(device_type, index=None):
     return core._CLASS_DEVICE(device_type, index)
 
 
-__all__ = [
-    "from_dlpack",
-    "Tensor",
-    "device",
-    "Device",
-    "DLDeviceType",
-]
+__all__ = ["from_dlpack", "Tensor", "device", "Device", "DLDeviceType"]

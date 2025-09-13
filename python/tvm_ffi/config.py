@@ -17,8 +17,9 @@
 """Config utilities for finding paths to lib and headers"""
 
 import argparse
-import sys
 import os
+import sys
+
 from . import libinfo
 
 
@@ -33,7 +34,7 @@ def find_windows_implib():
 def __main__():
     """Main function"""
     parser = argparse.ArgumentParser(
-        description="Get various configuration information needed to compile with tvm-ffi",
+        description="Get various configuration information needed to compile with tvm-ffi"
     )
 
     parser.add_argument("--includedir", action="store_true", help="Print include directory")

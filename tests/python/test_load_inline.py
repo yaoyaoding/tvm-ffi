@@ -15,9 +15,10 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import pytest
-import numpy
 import sys
+
+import numpy
+import pytest
 
 try:
     import torch
@@ -144,7 +145,7 @@ def test_load_inline_cpp_build_dir():
             }
         """,
         functions=["add_one_cpu"],
-        build_directory="./build_add_one",
+        build_directory="./build/build_add_one",
     )
 
     x = numpy.array([1, 2, 3, 4, 5], dtype=numpy.float32)

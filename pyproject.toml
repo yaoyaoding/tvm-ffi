@@ -132,6 +132,18 @@ extend_skip = ["3rdparty"]
 line_length = 100
 skip_gitignore = true
 
+[tool.ruff]
+include = ["python/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["E741"]
+
+[tool.ruff.lint.pylint]
+max-args = 10
+
 [tool.cibuildwheel]
 build-verbosity = 1
 

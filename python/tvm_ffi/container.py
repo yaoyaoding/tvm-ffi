@@ -16,10 +16,9 @@
 # under the License.
 """Container classes."""
 import collections.abc
-
 from typing import Any, Mapping, Sequence
-from . import core
-from . import _ffi_api
+
+from . import _ffi_api, core
 from .registry import register_object
 
 __all__ = ["Array", "Map"]

@@ -18,7 +18,8 @@
 """Access path classes."""
 
 from enum import IntEnum
-from typing import List, Any
+from typing import Any, List
+
 from . import core
 from .registry import register_object
 

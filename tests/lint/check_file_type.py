@@ -16,8 +16,8 @@
 # under the License.
 """Helper tool to check file types that are allowed to checkin."""
 import os
-import sys
 import subprocess
+import sys
 
 # List of file types we allow
 ALLOW_EXTENSION = {

@@ -15,9 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-import sys
-import os
 import glob
+import os
+import sys
 
 
 def split_env_var(env_var, split):

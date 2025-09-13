@@ -16,6 +16,7 @@
 # under the License.
 """FFI registry to register function and objects."""
 import sys
+
 from . import core
 
 # whether we simplify skip unknown objects regtistration

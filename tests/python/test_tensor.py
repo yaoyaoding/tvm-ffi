@@ -21,8 +21,9 @@ try:
 except ImportError:
     torch = None
 
-import tvm_ffi
 import numpy as np
+
+import tvm_ffi
 
 
 def test_tensor_attributes():

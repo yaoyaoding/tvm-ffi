@@ -16,7 +16,8 @@
 # under the License.
 """Serialization related utilities to enable some object can be pickled"""
 
-from typing import Optional, Any
+from typing import Any, Optional
+
 from . import _ffi_api
 
 

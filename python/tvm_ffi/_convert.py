@@ -17,8 +17,8 @@
 """Conversion utilities to bring python objects into ffi values."""
 from numbers import Number
 from typing import Any
-from . import core
-from . import container
+
+from . import container, core
 
 
 def convert(value: Any) -> Any:

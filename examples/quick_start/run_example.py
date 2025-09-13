@@ -21,8 +21,9 @@ try:
 except ImportError:
     torch = None
 
-import numpy
 import ctypes
+
+import numpy
 
 
 def run_add_one_cpu():
