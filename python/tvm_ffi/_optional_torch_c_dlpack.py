@@ -40,7 +40,10 @@ def load_torch_c_dlpack_extension():
 #include <dlpack/dlpack.h>
 #include <ATen/DLConvertor.h>
 #include <ATen/Functions.h>
+
+#ifdef BUILD_WITH_CUDA
 #include <c10/cuda/CUDAStream.h>
+#endif
 
 using namespace std;
 namespace at {
@@ -318,9 +321,11 @@ int TorchDLPackFromPyObject(void* py_obj, DLManagedTensorVersioned** out, void**
   try {
     py::handle handle(static_cast<PyObject*>(py_obj));
     at::Tensor tensor = handle.cast<at::Tensor>();
+#ifdef BUILD_WITH_CUDA
     if (env_stream != nullptr && tensor.is_cuda()) {
       *env_stream = at::cuda::getCurrentCUDAStream(tensor.device().index()).stream();
     }
+#endif
     *out = at::toDLPackImpl<DLManagedTensorVersioned>(tensor);
     return 0;
   } catch (const std::exception& e) {
@@ -375,16 +380,23 @@ int64_t TorchDLPackTensorAllocatorPtr() {
         import torch
         from torch.utils import cpp_extension
 
+        include_paths = libinfo.include_paths()
+        extra_cflags = ["-O3"]
+
+        if torch.cuda.is_available():
+            include_paths += cpp_extension.include_paths("cuda")
+            extra_cflags += ["-DBUILD_WITH_CUDA"]
+
         mod = cpp_extension.load_inline(
-            name="to_dlpack",
+            name="c_dlpack",
             cpp_sources=cpp_source,
             functions=[
                 "TorchDLPackFromPyObjectPtr",
                 "TorchDLPackToPyObjectPtr",
                 "TorchDLPackTensorAllocatorPtr",
             ],
-            extra_cflags=["-O3"],
-            extra_include_paths=libinfo.include_paths() + cpp_extension.include_paths("cuda"),
+            extra_cflags=extra_cflags,
+            extra_include_paths=include_paths,
         )
         # set the dlpack related flags
         torch.Tensor.__c_dlpack_from_pyobject__ = mod.TorchDLPackFromPyObjectPtr()

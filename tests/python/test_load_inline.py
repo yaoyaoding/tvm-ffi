@@ -200,25 +200,17 @@ def test_load_inline_cuda():
         torch.testing.assert_close(x_cuda + 1, y_cuda)
 
 
-@pytest.mark.skipif(
-    torch is None or not torch.cuda.is_available(), reason="Requires torch and CUDA"
-)
-def test_load_inline_cuda_with_env_tensor_allocator():
+@pytest.mark.skipif(torch is None, reason="Requires torch")
+def test_load_inline_with_env_tensor_allocator():
     if not hasattr(torch.Tensor, "__c_dlpack_tensor_allocator__"):
         pytest.skip("Torch does not support __c_dlpack_tensor_allocator__")
     mod: Module = tvm_ffi.cpp.load_inline(
         name="hello",
-        cuda_sources=r"""
+        cpp_sources=r"""
             #include <tvm/ffi/container/tensor.h>
             #include <tvm/ffi/container/tuple.h>
             #include <tvm/ffi/container/map.h>
 
-            __global__ void AddOneKernel(float* x, float* y, int n) {
-              int idx = blockIdx.x * blockDim.x + threadIdx.x;
-              if (idx < n) {
-                y[idx] = x[idx] + 1;
-              }
-            }
             namespace ffi = tvm::ffi;
 
             ffi::Tensor return_add_one(ffi::Map<ffi::String, ffi::Tuple<ffi::Tensor>> kwargs) {
@@ -232,31 +224,22 @@ def test_load_inline_cuda_with_env_tensor_allocator():
               ffi::Tensor y = ffi::Tensor::FromDLPackAlloc(
                 TVMFFIEnvGetTensorAllocator(), ffi::Shape({x->shape[0]}), f32_dtype, x->device);
               int64_t n = x->shape[0];
-              int64_t nthread_per_block = 256;
-              int64_t nblock = (n + nthread_per_block - 1) / nthread_per_block;
-              // Obtain the current stream from the environment
-              // it will be set to torch.cuda.current_stream() when calling the function
-              // with torch.Tensors
-              cudaStream_t stream = static_cast<cudaStream_t>(
-                  TVMFFIEnvGetStream(x->device.device_type, x->device.device_id));
-              // launch the kernel
-              AddOneKernel<<<nblock, nthread_per_block, 0, stream>>>(static_cast<float*>(x->data),
-                                                                     static_cast<float*>(y->data), n);
+              for (int i = 0; i < n; ++i) {
+                static_cast<float*>(y->data)[i] = static_cast<float*>(x->data)[i] + 1;
+              }
               return y;
             }
         """,
         functions=["return_add_one"],
     )
-
     if torch is not None:
-        x_cuda = torch.asarray([1, 2, 3, 4, 5], dtype=torch.float32, device="cuda")
+        x_cpu = torch.asarray([1, 2, 3, 4, 5], dtype=torch.float32, device="cpu")
         # test support for nested container passing
-        y_cuda = mod.return_add_one({"x": [x_cuda]})
-        assert isinstance(y_cuda, torch.Tensor)
-        assert y_cuda.shape == (5,)
-        assert y_cuda.dtype == torch.float32
-        torch.testing.assert_close(x_cuda + 1, y_cuda)
-        assert y_cuda.is_cuda
+        y_cpu = mod.return_add_one({"x": [x_cpu]})
+        assert isinstance(y_cpu, torch.Tensor)
+        assert y_cpu.shape == (5,)
+        assert y_cpu.dtype == torch.float32
+        torch.testing.assert_close(x_cpu + 1, y_cpu)
 
 
 @pytest.mark.skipif(
