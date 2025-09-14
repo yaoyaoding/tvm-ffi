@@ -34,7 +34,7 @@ def test_load_inline_cpp():
     mod: Module = tvm_ffi.cpp.load_inline(
         name="hello",
         cpp_sources=r"""
-            void add_one_cpu(DLTensor* x, DLTensor* y) {
+            void add_one_cpu(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -61,7 +61,7 @@ def test_load_inline_cpp_with_docstrings():
     mod: Module = tvm_ffi.cpp.load_inline(
         name="hello",
         cpp_sources=r"""
-            void add_one_cpu(DLTensor* x, DLTensor* y) {
+            void add_one_cpu(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -89,7 +89,7 @@ def test_load_inline_cpp_multiple_sources():
         name="hello",
         cpp_sources=[
             r"""
-            void add_one_cpu(DLTensor* x, DLTensor* y) {
+            void add_one_cpu(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -103,7 +103,7 @@ def test_load_inline_cpp_multiple_sources():
             }
         """,
             r"""
-            void add_two_cpu(DLTensor* x, DLTensor* y) {
+            void add_two_cpu(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -131,7 +131,7 @@ def test_load_inline_cpp_build_dir():
     mod: Module = tvm_ffi.cpp.load_inline(
         name="hello",
         cpp_sources=r"""
-            void add_one_cpu(DLTensor* x, DLTensor* y) {
+            void add_one_cpu(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -168,7 +168,7 @@ def test_load_inline_cuda():
               }
             }
 
-            void add_one_cuda(DLTensor* x, DLTensor* y) {
+            void add_one_cuda(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -249,7 +249,7 @@ def test_load_inline_both():
     mod: Module = tvm_ffi.cpp.load_inline(
         name="hello",
         cpp_sources=r"""
-            void add_one_cpu(DLTensor* x, DLTensor* y) {
+            void add_one_cpu(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
@@ -262,7 +262,7 @@ def test_load_inline_both():
               }
             }
 
-            void add_one_cuda(DLTensor* x, DLTensor* y);
+            void add_one_cuda(tvm::ffi::Tensor x, tvm::ffi::Tensor y);
         """,
         cuda_sources=r"""
             __global__ void AddOneKernel(float* x, float* y, int n) {
@@ -272,7 +272,7 @@ def test_load_inline_both():
               }
             }
 
-            void add_one_cuda(DLTensor* x, DLTensor* y) {
+            void add_one_cuda(tvm::ffi::Tensor x, tvm::ffi::Tensor y) {
               // implementation of a library function
               TVM_FFI_ICHECK(x->ndim == 1) << "x must be a 1D tensor";
               DLDataType f32_dtype{kDLFloat, 32, 1};
