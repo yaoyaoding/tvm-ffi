@@ -33,6 +33,16 @@ github:
       required_pull_request_reviews:
         required_approving_review_count: 1
 
+  enabled_merge_buttons:
+    # enable squash button:
+    squash:  true
+    # default commit message when merging with a squash commit
+    squash_commit_message: DEFAULT
+    # enable merge button:
+    merge:   false
+    # disable rebase button:
+    rebase:  false
+
 notifications:
   commits: commits@tvm.apache.org
   issues: discuss-archive@tvm.apache.org
