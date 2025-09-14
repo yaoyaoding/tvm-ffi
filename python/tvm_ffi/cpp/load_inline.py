@@ -128,14 +128,15 @@ def _get_cuda_target() -> str:
             return "-gencode=arch=compute_70,code=sm_70"
 
 
-
 def _run_command_in_dev_prompt(args, cwd, capture_output):
-    """ Locates the Developer Command Prompt and runs a command within its environment. """
+    """Locates the Developer Command Prompt and runs a command within its environment."""
     try:
         # Path to vswhere.exe
         vswhere_path = os.path.join(
             os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"),
-            "Microsoft Visual Studio", "Installer", "vswhere.exe"
+            "Microsoft Visual Studio",
+            "Installer",
+            "vswhere.exe",
         )
 
         if not os.path.exists(vswhere_path):
@@ -143,8 +144,18 @@ def _run_command_in_dev_prompt(args, cwd, capture_output):
 
         # Find the Visual Studio installation path
         vs_install_path = subprocess.run(
-            [vswhere_path, "-latest", "-prerelease", "-products", "*", "-property", "installationPath"],
-            capture_output=True, text=True, check=True
+            [
+                vswhere_path,
+                "-latest",
+                "-prerelease",
+                "-products",
+                "*",
+                "-property",
+                "installationPath",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
 
         if not vs_install_path:
@@ -159,14 +170,21 @@ def _run_command_in_dev_prompt(args, cwd, capture_output):
         # Use cmd.exe to run the batch file and then your command.
         # The /k flag keeps the command prompt open after the batch file runs.
         # The "&" symbol chains the commands.
-        cmd_command = '"{vsdevcmd_path}" -arch=x64 & {command}'.format(vsdevcmd_path=vsdevcmd_path, command=' '.join(args))
+        cmd_command = '"{vsdevcmd_path}" -arch=x64 & {command}'.format(
+            vsdevcmd_path=vsdevcmd_path, command=" ".join(args)
+        )
         print(cmd_command)
 
         # Execute the command in a new shell
         return subprocess.run(cmd_command, cwd=cwd, capture_output=capture_output, shell=True)
 
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
-        raise RuntimeError("Failed to run the following command in MSVC developer environment: {}".format(' '.join(args))) from e
+        raise RuntimeError(
+            "Failed to run the following command in MSVC developer environment: {}".format(
+                " ".join(args)
+            )
+        ) from e
+
 
 def _generate_ninja_build(
     name: str,
