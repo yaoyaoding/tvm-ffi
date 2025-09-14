@@ -173,7 +173,6 @@ def _run_command_in_dev_prompt(args, cwd, capture_output):
         cmd_command = '"{vsdevcmd_path}" -arch=x64 & {command}'.format(
             vsdevcmd_path=vsdevcmd_path, command=" ".join(args)
         )
-        print(cmd_command)
 
         # Execute the command in a new shell
         return subprocess.run(cmd_command, cwd=cwd, capture_output=capture_output, shell=True)
