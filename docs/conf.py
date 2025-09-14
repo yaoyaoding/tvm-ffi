@@ -225,3 +225,7 @@ html_context = {
     "github_version": "main",
     "conf_py_path": "/docs/",
 }
+
+html_static_path = ['_static']
+
+html_css_files = ['custom.css']
