@@ -22,7 +22,7 @@ from enum import IntEnum
 from . import _ffi_api, core
 from .registry import register_object
 
-__all__ = ["Module", "ModulePropertyMask", "system_lib", "load_module"]
+__all__ = ["Module", "ModulePropertyMask", "load_module", "system_lib"]
 
 
 class ModulePropertyMask(IntEnum):
@@ -37,7 +37,7 @@ class ModulePropertyMask(IntEnum):
 class Module(core.Object):
     """Module container for dynamically loaded Module.
 
-    Example
+    Example:
     -------
     .. code-block:: python
 
@@ -48,9 +48,10 @@ class Module(core.Object):
         # you can use mod.func_name to call the exported function
         mod.func_name(*args)
 
-    See Also
+    See Also:
     --------
     :py:func:`tvm_ffi.load_module`
+
     """
 
     # constant for entry function name
@@ -63,17 +64,22 @@ class Module(core.Object):
 
     @property
     def imports(self):
-        """Get imported modules
+        """Get imported modules.
 
         Returns
-        ----------
+        -------
         modules : list of Module
             The module
+
         """
         return self.imports_
 
     def implements_function(self, name, query_imports=False):
-        """Returns True if the module has a definition for the global function with name. Note
+        """Return True if the module defines a global function.
+
+        Note
+        ----
+        that has_function(name) does not imply get_function(name) is non-null since the module
         that has_function(name) does not imply get_function(name) is non-null since the module
         may be, eg, a CSourceModule which cannot supply a packed-func implementation of the function
         without further compilation. However, get_function(name) non null should always imply
@@ -91,6 +97,7 @@ class Module(core.Object):
         -------
         b : Bool
             True if module (or one of its imports) has a definition for name.
+
         """
         return _ffi_api.ModuleImplementsFunction(self, name, query_imports)
 
@@ -118,6 +125,7 @@ class Module(core.Object):
         -------
         f : tvm_ffi.Function
             The result function.
+
         """
         func = _ffi_api.ModuleGetFunction(self, name, query_imports)
         if func is None:
@@ -131,15 +139,18 @@ class Module(core.Object):
         ----------
         module : tvm.runtime.Module
             The other module.
+
         """
         _ffi_api.ModuleImportModule(self, module)
 
     def __getitem__(self, name):
+        """Return function by name using item access (module["func"])."""
         if not isinstance(name, str):
             raise ValueError("Can only take string as function name")
         return self.get_function(name)
 
     def __call__(self, *args):
+        """Call the module's entry function (`main`)."""
         # pylint: disable=not-callable
         return self.main(*args)
 
@@ -155,6 +166,7 @@ class Module(core.Object):
         -------
         source : str
             The result source code.
+
         """
         return _ffi_api.ModuleInspectSource(self, fmt)
 
@@ -169,40 +181,44 @@ class Module(core.Object):
         -------
         mask : int
             Bitmask of runtime module property
+
         """
         return _ffi_api.ModuleGetPropertyMask(self)
 
     def is_binary_serializable(self):
-        """Module 'binary serializable', save_to_bytes is supported.
+        """Return whether the module is binary serializable (supports save_to_bytes).
 
         Returns
         -------
         b : Bool
             True if the module is binary serializable.
+
         """
         return (self.get_property_mask() & ModulePropertyMask.BINARY_SERIALIZABLE) != 0
 
     def is_runnable(self):
-        """Module 'runnable', get_function is supported.
+        """Return whether the module is runnable (supports get_function).
 
         Returns
         -------
         b : Bool
             True if the module is runnable.
+
         """
         return (self.get_property_mask() & ModulePropertyMask.RUNNABLE) != 0
 
     def is_compilation_exportable(self):
-        """Module 'compilation exportable', write_to_file is supported for object or source.
+        """Return whether the module is compilation exportable.
+
+        write_to_file is supported for object or source.
 
         Returns
         -------
         b : Bool
             True if the module is compilation exportable.
+
         """
-        return (
-            self.get_property_mask() & ModulePropertyMask.COMPILATION_EXPORTABLE
-        ) != 0
+        return (self.get_property_mask() & ModulePropertyMask.COMPILATION_EXPORTABLE) != 0
 
     def clear_imports(self):
         """Remove all imports of the module."""
@@ -221,6 +237,7 @@ class Module(core.Object):
         See Also
         --------
         runtime.Module.export_library : export the module to shared library.
+
         """
         _ffi_api.ModuleWriteToFile(self, file_name, fmt)
 
@@ -245,6 +262,7 @@ def system_lib(symbol_prefix=""):
     -------
     module : runtime.Module
         The system-wide library module.
+
     """
     return _ffi_api.SystemLib(symbol_prefix)
 
@@ -272,5 +290,6 @@ def load_module(path):
     See Also
     --------
     :py:class:`tvm_ffi.Module`
+
     """
     return _ffi_api.ModuleLoadFromFile(path)

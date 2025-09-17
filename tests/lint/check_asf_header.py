@@ -18,9 +18,9 @@
 
 import argparse
 import fnmatch
-import os
 import subprocess
 import sys
+from pathlib import Path
 
 header_cstyle = """
 /*
@@ -172,7 +172,7 @@ SKIP_LIST = []
 
 
 def should_skip_file(filepath):
-    """Check if file should be skipped based on SKIP_LIST"""
+    """Check if file should be skipped based on SKIP_LIST."""
     for pattern in SKIP_LIST:
         if fnmatch.fnmatch(filepath, pattern):
             return True
@@ -180,17 +180,15 @@ def should_skip_file(filepath):
 
 
 def get_git_files():
-    """Get list of files tracked by git"""
+    """Get list of files tracked by git."""
     try:
         result = subprocess.run(
-            ["git", "ls-files"], capture_output=True, text=True, cwd=os.getcwd()
+            ["git", "ls-files"], check=False, capture_output=True, text=True, cwd=Path.cwd()
         )
         if result.returncode == 0:
             return [line.strip() for line in result.stdout.split("\n") if line.strip()]
         else:
-            print(
-                "Error: Could not get git files. Make sure you're in a git repository."
-            )
+            print("Error: Could not get git files. Make sure you're in a git repository.")
             print("Git command failed:", result.stderr.strip())
             return None
     except FileNotFoundError:
@@ -211,12 +209,12 @@ def copyright_line(line):
 
 
 def check_header(fname, header):
-    """Check header status of file without modifying it"""
-    if not os.path.exists(fname):
+    """Check header status of file without modifying it."""
+    if not Path(fname).exists():
         print(f"ERROR: Cannot find {fname}")
         return False
 
-    lines = open(fname).readlines()
+    lines = Path(fname).open().readlines()
 
     has_asf_header = False
     has_copyright = False
@@ -243,7 +241,7 @@ def check_header(fname, header):
 
 
 def collect_files():
-    """Collect all files that need header checking from git"""
+    """Collect all files that need header checking from git."""
     files = []
 
     # Get files from git (required)
@@ -261,26 +259,25 @@ def collect_files():
 
         # Check if this file type is supported
         suffix = git_file.split(".")[-1] if "." in git_file else ""
-        basename = os.path.basename(git_file)
+        basename = Path(git_file).name
 
         if (
             suffix in FMT_MAP
             or basename == "gradle.properties"
-            or suffix == ""
-            and basename in ["CMakeLists", "Makefile"]
+            or (suffix == "" and basename in ["CMakeLists", "Makefile"])
         ):
             files.append(git_file)
 
     return files
 
 
-def add_header(fname, header):
-    """Add header to file"""
-    if not os.path.exists(fname):
-        print("Cannot find %s ..." % fname)
+def add_header(fname, header):  # noqa: PLR0912
+    """Add header to file."""
+    if not Path(fname).exists():
+        print(f"Cannot find {fname} ...")
         return
 
-    lines = open(fname).readlines()
+    lines = Path(fname).open().readlines()
 
     has_asf_header = False
     has_copyright = False
@@ -295,7 +292,7 @@ def add_header(fname, header):
     if has_asf_header and not has_copyright:
         return
 
-    with open(fname, "w") as outfile:
+    with Path(fname).open("w") as outfile:
         skipline = False
         if not lines:
             skipline = False  # File is enpty
@@ -318,12 +315,12 @@ def add_header(fname, header):
                 outfile.write(header + "\n\n")
             outfile.write("".join(lines))
     if not has_asf_header:
-        print("Add header to %s" % fname)
+        print(f"Add header to {fname}")
     if has_copyright:
-        print("Removed copyright line from %s" % fname)
+        print(f"Removed copyright line from {fname}")
 
 
-def main():
+def main():  # noqa: PLR0911, PLR0912
     parser = argparse.ArgumentParser(
         description="Check and fix ASF headers in source files tracked by git",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -400,7 +397,7 @@ Examples:
     for fname in files:
         processed_count += 1
         suffix = fname.split(".")[-1] if "." in fname else ""
-        basename = os.path.basename(fname)
+        basename = Path(fname).name
 
         # Determine header type
         if suffix in FMT_MAP:

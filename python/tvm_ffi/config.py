@@ -14,51 +14,42 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Config utilities for finding paths to lib and headers"""
+"""Config utilities for finding paths to lib and headers."""
 
 import argparse
-import os
 import sys
+from pathlib import Path
 
 from . import libinfo
 
 
 def find_windows_implib():
-    libdir = os.path.dirname(libinfo.find_libtvm_ffi())
-    implib = os.path.join(libdir, "tvm_ffi.lib")
-    if not os.path.isfile(implib):
+    """Find and return the Windows import library path for tvm_ffi.lib."""
+    libdir = Path(libinfo.find_libtvm_ffi()).parent
+    implib = libdir / "tvm_ffi.lib"
+    if not implib.is_file():
         raise RuntimeError(f"Cannot find imp lib {implib}")
-    return implib
+    return str(implib)
 
 
-def __main__():
-    """Main function"""
+def __main__():  # noqa: PLR0912
+    """Parse CLI args and print build and include configuration paths."""
     parser = argparse.ArgumentParser(
         description="Get various configuration information needed to compile with tvm-ffi"
     )
 
-    parser.add_argument(
-        "--includedir", action="store_true", help="Print include directory"
-    )
+    parser.add_argument("--includedir", action="store_true", help="Print include directory")
     parser.add_argument(
         "--dlpack-includedir",
         action="store_true",
         help="Print dlpack include directory",
     )
-    parser.add_argument(
-        "--cmakedir", action="store_true", help="Print library directory"
-    )
-    parser.add_argument(
-        "--sourcedir", action="store_true", help="Print source directory"
-    )
-    parser.add_argument(
-        "--libfiles", action="store_true", help="Fully qualified library filenames"
-    )
+    parser.add_argument("--cmakedir", action="store_true", help="Print library directory")
+    parser.add_argument("--sourcedir", action="store_true", help="Print source directory")
+    parser.add_argument("--libfiles", action="store_true", help="Fully qualified library filenames")
     parser.add_argument("--libdir", action="store_true", help="Print library directory")
     parser.add_argument("--libs", action="store_true", help="Libraries to be linked")
-    parser.add_argument(
-        "--cython-lib-path", action="store_true", help="Print cython path"
-    )
+    parser.add_argument("--cython-lib-path", action="store_true", help="Print cython path")
     parser.add_argument("--cxxflags", action="store_true", help="Print cxx flags")
     parser.add_argument("--cflags", action="store_true", help="Print c flags")
     parser.add_argument("--ldflags", action="store_true", help="Print ld flags")
@@ -77,7 +68,7 @@ def __main__():
     if args.cmakedir:
         print(libinfo.find_cmake_path())
     if args.libdir:
-        print(os.path.dirname(libinfo.find_libtvm_ffi()))
+        print(Path(libinfo.find_libtvm_ffi()).parent)
     if args.libfiles:
         if sys.platform.startswith("win32"):
             print(find_windows_implib())
@@ -102,7 +93,7 @@ def __main__():
             print("-ltvm_ffi")
     if args.ldflags:
         if not sys.platform.startswith("win32"):
-            print(f"-L{os.path.dirname(libinfo.find_libtvm_ffi())}")
+            print(f"-L{Path(libinfo.find_libtvm_ffi()).parent}")
 
 
 if __name__ == "__main__":

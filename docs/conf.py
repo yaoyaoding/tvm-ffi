@@ -14,8 +14,11 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+"""Sphinx configuration for the tvm-ffi documentation site."""
+
 # -*- coding: utf-8 -*-
 import os
+from pathlib import Path
 
 import tomli
 
@@ -25,9 +28,8 @@ build_exhale = os.environ.get("BUILD_CPP_DOCS", "0") == "1"
 
 
 # -- General configuration ------------------------------------------------
-
 # Load version from pyproject.toml
-with open("../pyproject.toml", "rb") as f:
+with Path("../pyproject.toml").open("rb") as f:
     pyproject_data = tomli.load(f)
 __version__ = pyproject_data["project"]["version"]
 
@@ -181,6 +183,7 @@ footer_note = (
 
 
 def footer_html():
+    """Generate HTML for the documentation footer."""
     # Create footer HTML with two-line layout
     # Generate dropdown menu items
     dropdown_items = ""

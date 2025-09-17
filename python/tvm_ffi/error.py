@@ -26,7 +26,7 @@ from . import core
 
 
 def _parse_traceback(traceback):
-    """Parse the traceback string into a list of (filename, lineno, func)
+    """Parse the traceback string into a list of (filename, lineno, func).
 
     Parameters
     ----------
@@ -37,6 +37,7 @@ def _parse_traceback(traceback):
     -------
     result : List[Tuple[str, int, str]]
         The list of (filename, lineno, func)
+
     """
     pattern = r'File "(.+?)", line (\d+), in (.+)'
     result = []
@@ -54,11 +55,10 @@ def _parse_traceback(traceback):
 
 
 class TracebackManager:
-    """
-    Helper to manage traceback generation
-    """
+    """Helper to manage traceback generation."""
 
     def __init__(self):
+        """Initialize the traceback manager and its cache."""
         self._code_cache = {}
 
     def _get_cached_code_object(self, filename, lineno, func):
@@ -84,7 +84,7 @@ class TracebackManager:
         return code_object
 
     def _create_frame(self, filename, lineno, func):
-        """Create a frame object from the filename, lineno, and func"""
+        """Create a frame object from the filename, lineno, and func."""
         code_object = self._get_cached_code_object(filename, lineno, func)
         # call into get frame, but changes the context so the code
         # points to the correct frame
@@ -93,7 +93,7 @@ class TracebackManager:
         return eval(code_object, context, context)
 
     def append_traceback(self, tb, filename, lineno, func):
-        """Append a traceback to the given traceback
+        """Append a traceback to the given traceback.
 
         Parameters
         ----------
@@ -110,6 +110,7 @@ class TracebackManager:
         -------
         new_tb : types.TracebackType
             The new traceback with the appended frame.
+
         """
         frame = self._create_frame(filename, lineno, func)
         return types.TracebackType(tb, frame, frame.f_lasti, lineno)
@@ -119,7 +120,7 @@ _TRACEBACK_MANAGER = TracebackManager()
 
 
 def _with_append_traceback(py_error, traceback):
-    """Append the traceback to the py_error and return it"""
+    """Append the traceback to the py_error and return it."""
     tb = py_error.__traceback__
     for filename, lineno, func in reversed(_parse_traceback(traceback)):
         tb = _TRACEBACK_MANAGER.append_traceback(tb, filename, lineno, func)
@@ -127,7 +128,7 @@ def _with_append_traceback(py_error, traceback):
 
 
 def _traceback_to_str(tb):
-    """Convert the traceback to a string"""
+    """Convert the traceback to a string."""
     lines = []
     while tb is not None:
         frame = tb.tb_frame
@@ -169,13 +170,14 @@ def register_error(name_or_cls=None, cls=None):
 
       err_inst = tvm.error.create_ffi_error("MyError: xyz")
       assert isinstance(err_inst, MyError)
+
     """
     if callable(name_or_cls):
         cls = name_or_cls
         name_or_cls = cls.__name__
 
     def register(mycls):
-        """internal register function"""
+        """Register the error class name with the FFI core."""
         err_name = name_or_cls if isinstance(name_or_cls, str) else mycls.__name__
         core.ERROR_NAME_TO_TYPE[err_name] = mycls
         core.ERROR_TYPE_TO_NAME[mycls] = err_name
