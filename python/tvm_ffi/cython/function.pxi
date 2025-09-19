@@ -25,8 +25,15 @@ if os.environ.get("TVM_FFI_BUILD_DOCS", "0") == "0":
         import torch
     except ImportError:
         torch = None
+
+    try:
+        # optionally import numpy
+        import numpy
+    except ImportError:
+        numpy = None
 else:
     torch = None
+    numpy = None
 
 
 cdef int _RELEASE_GIL_BY_DEFAULT = int(
@@ -470,6 +477,30 @@ cdef int TVMFFIPyArgSetterFallback_(
     TVMFFIPyPushTempFFIObject(ctx, chandle)
 
 
+cdef int TVMFFIPyArgSetterDTypeFromTorch_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for torch dtype"""
+    cdef py_obj = <object>py_arg
+    if py_obj not in TORCH_DTYPE_TO_DTYPE:
+        raise ValueError("Unsupported torch dtype: ", py_obj)
+    out.type_index = kTVMFFIDataType
+    out.v_dtype = TORCH_DTYPE_TO_DTYPE[py_obj]
+    return 0
+
+cdef int TVMFFIPyArgSetterDTypeFromNumpy_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for torch dtype"""
+    cdef py_obj = <object>py_arg
+    if py_obj not in NUMPY_DTYPE_TO_DTYPE:
+        raise ValueError("Unsupported numpy or ml_dtypes dtype: ", py_obj)
+    out.type_index = kTVMFFIDataType
+    out.v_dtype = NUMPY_DTYPE_TO_DTYPE[py_obj]
+    return 0
+
 cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) except -1:
     """
     Factory function that creates an argument setter for a given Python argument type.
@@ -559,6 +590,12 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
         return 0
     if callable(arg):
         out.func = TVMFFIPyArgSetterCallable_
+        return 0
+    if torch is not None and isinstance(arg, torch.dtype):
+        out.func = TVMFFIPyArgSetterDTypeFromTorch_
+        return 0
+    if numpy is not None and isinstance(arg, numpy.dtype):
+        out.func = TVMFFIPyArgSetterDTypeFromNumpy_
         return 0
     if isinstance(arg, Exception):
         out.func = TVMFFIPyArgSetterException_
