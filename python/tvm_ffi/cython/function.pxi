@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 import ctypes
+import threading
 import os
 from numbers import Real, Integral
 
@@ -501,6 +502,10 @@ cdef int TVMFFIPyArgSetterDTypeFromNumpy_(
     out.v_dtype = NUMPY_DTYPE_TO_DTYPE[py_obj]
     return 0
 
+
+cdef _DISPATCH_TYPE_KEEP_ALIVE = set()
+cdef _DISPATCH_TYPE_KEEP_ALIVE_LOCK = threading.Lock()
+
 cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) except -1:
     """
     Factory function that creates an argument setter for a given Python argument type.
@@ -510,6 +515,24 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
     # priortize native types over external types
     cdef object arg = <object>value
     cdef long long temp_ptr
+
+    # The C++ dispatcher dispatches the argument passing by TYPE(obj) pointer which
+    # is non-owning. This means that there is the following edge case:
+    # - type A is registered through dispatcher
+    # - type A gets garbage collected (because it is a local type)
+    # - type B is created and uses the same memory address as type A
+    #
+    # Then when we pass in type B, it will mistakenly use the dispatch function for type A
+    #
+    # To prevent this, we keep alive the types that are registered through dispatcher
+    # by adding them to _DISPATCH_TYPE_KEEP_ALIVE
+    #
+    # NOTE that the total number of types that are registered through dispatcher is expected
+    # to be limited in practice so we can afford to keep them alive
+    # Lock is used to ensure thread-safety for future thread-free python case
+    with _DISPATCH_TYPE_KEEP_ALIVE_LOCK:
+        _DISPATCH_TYPE_KEEP_ALIVE.add(type(arg))
+
     if arg is None:
         out.func = TVMFFIPyArgSetterNone_
         return 0
