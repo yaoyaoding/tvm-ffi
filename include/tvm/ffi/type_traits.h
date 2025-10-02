@@ -431,6 +431,10 @@ struct TypeTraits<void*> : public TypeTraitsBase {
       DLTensor* dl_tensor = static_cast<DLTensor*>(src->v_ptr);
       return static_cast<void*>(dl_tensor->data);
     }
+    if (src->type_index == TypeIndex::kTVMFFIInt) {
+      uint64_t p_int64 = src->v_int64;
+      return reinterpret_cast<void*>(p_int64);
+    }
     return std::nullopt;
   }
 
