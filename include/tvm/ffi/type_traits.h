@@ -427,6 +427,10 @@ struct TypeTraits<void*> : public TypeTraitsBase {
     if (src->type_index == TypeIndex::kTVMFFINone) {
       return static_cast<void*>(nullptr);
     }
+    if (src->type_index == TypeIndex::kTVMFFIDLTensorPtr) {
+      DLTensor* dl_tensor = static_cast<DLTensor*>(src->v_ptr);
+      return static_cast<void*>(dl_tensor->data);
+    }
     return std::nullopt;
   }
 
