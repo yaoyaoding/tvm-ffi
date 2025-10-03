@@ -301,11 +301,22 @@ struct TypeTraits<Int, std::enable_if_t<std::is_integral_v<Int>>> : public TypeT
   TVM_FFI_INLINE static std::string TypeStr() { return StaticTypeKey::kTVMFFIInt; }
 };
 
+/// \cond Doxygen_Suppress
+
+// trait to check if a type is an integeral enum
+// note that we need this trait so we can confirm underlying_type_t is an integral type
+// to avoid potential undefined behavior
+template <typename T, bool = std::is_enum_v<T>>
+constexpr bool is_integeral_enum_v = false;
+
+template <typename T>
+constexpr bool is_integeral_enum_v<T, true> = std::is_integral_v<std::underlying_type_t<T>>;
+
+/// \endcond
+
 // Enum Integer POD values
 template <typename IntEnum>
-struct TypeTraits<IntEnum, std::enable_if_t<std::is_enum_v<IntEnum> &&
-                                            std::is_integral_v<std::underlying_type_t<IntEnum>>>>
-    : public TypeTraitsBase {
+struct TypeTraits<IntEnum, std::enable_if_t<is_integeral_enum_v<IntEnum>>> : public TypeTraitsBase {
   static constexpr int32_t field_static_type_index = TypeIndex::kTVMFFIInt;
 
   TVM_FFI_INLINE static void CopyToAnyView(const IntEnum& src, TVMFFIAny* result) {
