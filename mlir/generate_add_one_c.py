@@ -229,15 +229,30 @@ def main():
     
     # Optionally compile to shared library
     try:
-        from utils import dump_to_shared_library
-        print("=" * 80)
-        print("Compiling to shared library...")
-        print("=" * 80)
-        dump_to_shared_library(module, "libtvm_ffi_add_one_c.so", context=ctx)
-        print(f"Successfully created shared library: libtvm_ffi_add_one_c.so")
+        import tvm_ffi
+        from utils import mlir_to_shared_library_via_llvm
+        import os
+        
+        # Use the build directory instead of installed package
+        tvm_ffi_lib = tvm_ffi.libinfo.find_libtvm_ffi()
+        
+        # Use the new LLVM IR-based compilation method
+        # This bypasses ExecutionEngine's symbol validation issues
+        mlir_to_shared_library_via_llvm(
+            module=module,
+            output_path="libtvm_ffi_add_one_c.so",
+            context=ctx,
+            compiler="gcc",
+            link_libs=[tvm_ffi_lib],
+            opt_level=2,
+            keep_intermediates=False  # Set to True for debugging
+        )
+        mod = tvm_ffi.load_module("./libtvm_ffi_add_one_c.so")
+        mod.add_one_c()
     except Exception as e:
+        import traceback
         print(f"Note: Could not compile to shared library: {e}")
-        print("(This is optional - the MLIR IR was generated successfully)")
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

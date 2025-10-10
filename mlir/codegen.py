@@ -86,25 +86,24 @@ class TVMFFIBuilder(MLIRBuilder):
         #   Symbols not found: [ _mlir_TVMFFIErrorSetRaisedFromCStr ]
         # ```
         # skip for now
-        # error_func_type = self.func_type(params=[self.ptr_type, self.ptr_type], ret=self.void_type())
-        # func_op = llvm.func(self.TVMFFI_ERROR_SET_RAISED_FROM_C_STR_NAME, function_type=self.as_attr(error_func_type))
-        # func_op.attributes["llvm.emit_c_interface"] = ir.UnitAttr.get() 
-        # func_op.attributes["llvm.linkage"] = ir.StringAttr.get("external")
-        pass
+        error_func_type = self.func_type(params=[self.ptr_type, self.ptr_type], ret=self.void_type())
+        func_op = llvm.func(self.TVMFFI_ERROR_SET_RAISED_FROM_C_STR_NAME, function_type=self.as_attr(error_func_type))
+        func_op.attributes["llvm.emit_c_interface"] = ir.UnitAttr.get() 
+        func_op.attributes["llvm.linkage"] = ir.StringAttr.get("external")
     
     def raise_exception_and_return(self, exception_name: str, err_message: str) -> None:
         self.define_global_string(symbol='str_exception_name', content=exception_name)
         self.define_global_string(symbol='str_error_message', content=err_message)
-        # llvm.call(
-        #     result=None,
-        #     callee=self.TVMFFI_ERROR_SET_RAISED_FROM_C_STR_NAME,
-        #     callee_operands=[
-        #         self.address_of('str_exception_name', self.ptr_type), 
-        #         self.address_of('str_error_message', self.ptr_type)
-        #     ],
-        #     op_bundle_sizes=[],
-        #     op_bundle_operands=[],
-        # )
+        llvm.call(
+            result=None,
+            callee=self.TVMFFI_ERROR_SET_RAISED_FROM_C_STR_NAME,
+            callee_operands=[
+                self.address_of('str_exception_name', self.ptr_type), 
+                self.address_of('str_error_message', self.ptr_type)
+            ],
+            op_bundle_sizes=[],
+            op_bundle_operands=[],
+        )
         self.return_(self.i32(-1))
 
 

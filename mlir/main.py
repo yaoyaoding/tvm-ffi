@@ -4,7 +4,7 @@ from cutlass._mlir import ir
 from cutlass._mlir.dialects import llvm
 from kernel_spec import FunctionAdapter, Param, Var
 from codegen import generate_tvm_ffi_func
-from utils import dump_to_shared_library, run_passes
+from utils import dump_to_shared_library, mlir_to_shared_library_via_llvm
 
 class EmptyAdapter(FunctionAdapter):
     """A simple concrete implementation of FunctionAdapter"""
@@ -26,7 +26,8 @@ def main():
 
     print(module)
     print("\nCompiling to shared library...")
-    dump_to_shared_library(module, "libtvm_ffi_add_one.so", context=ctx, shared_libs=[tvm_ffi.libinfo.find_libtvm_ffi()])
+    mlir_to_shared_library_via_llvm(module, "libtvm_ffi_add_one.so", context=ctx, compiler="gcc", link_libs=[tvm_ffi.libinfo.find_libtvm_ffi()])
+    # dump_to_shared_library(module, "libtvm_ffi_add_one.so", context=ctx, shared_libs=[tvm_ffi.libinfo.find_libtvm_ffi()])
 
     mod = tvm_ffi.load_module("./libtvm_ffi_add_one.so")
     mod.add_one()
