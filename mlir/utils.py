@@ -1,6 +1,15 @@
 from typing import Optional, Sequence
-from cutlass._mlir import ir
+from cutlass._mlir import ir, passmanager
 from cutlass._mlir.dialects import llvm
+
+def run_passes(module: ir.Module, context: ir.Context) -> ir.Module:
+    with context:
+        # Module is already in LLVM dialect, so we just run standard optimization passes
+        pm = passmanager.PassManager.parse("builtin.module()")
+        # Note: IR printing requires disabling multi-threading first
+        # pm.enable_ir_printing(...)
+        pm.run(module.operation)
+        return module
 
 def run_module(module: ir.Module, func_name: str, args, context: ir.Context):
     import ctypes
@@ -29,7 +38,7 @@ def run_module(module: ir.Module, func_name: str, args, context: ir.Context):
         return result
 
 
-def dump_to_object_file(module: ir.Module, output_path: str, context: ir.Context):
+def dump_to_object_file(module: ir.Module, output_path: str, context: ir.Context, shared_libs: list[str] = []):
     """Dump the MLIR module to an object file using ExecutionEngine"""
     from cutlass._mlir.execution_engine import ExecutionEngine
     
@@ -38,7 +47,7 @@ def dump_to_object_file(module: ir.Module, output_path: str, context: ir.Context
         module.operation.verify()
         
         # Create execution engine with object file dumping
-        engine = ExecutionEngine(module, opt_level=2, shared_libs=[])
+        engine = ExecutionEngine(module, opt_level=2, shared_libs=shared_libs)
         
         # Dump the compiled object file
         engine.dump_to_object_file(output_path)
@@ -73,7 +82,7 @@ def compile_to_shared_library(object_file: str, output_path: str, compiler: str 
         raise
 
 
-def dump_to_shared_library(module: ir.Module, output_path: str, context: ir.Context, compiler: str = "gcc"):
+def dump_to_shared_library(module: ir.Module, output_path: str, context: ir.Context, compiler: str = "gcc", shared_libs: list[str] = []):
     """Dump the MLIR module directly to a shared library"""
     import os
     import tempfile
@@ -84,7 +93,7 @@ def dump_to_shared_library(module: ir.Module, output_path: str, context: ir.Cont
     
     try:
         # First dump to object file
-        dump_to_object_file(module, tmp_obj_path, context)
+        dump_to_object_file(module, tmp_obj_path, context, shared_libs)
         
         # Then compile to shared library
         compile_to_shared_library(tmp_obj_path, output_path, compiler)
