@@ -6,16 +6,15 @@ from kernel_spec import FunctionAdapter, Param, Var
 from type_builder import MLIRTypeBuilder
 
 
-class MLIRBuilder(MLIRTypeBuilder):
+class MLIRBuilder(MLIRTypeBuilder):  # TODO: move this class to mlir_builder.py, merge with type_builder.py
     """ A builder for MLIR related types and operations. 
 
     Convention:
-    all statement-generation methods expect we are inside a insertion point of the current block.
-    If the statement terminates the current block, it will assign the new block to the current block but not set the insersion point.
+    all statement-generation methods expect we are inside a insertion point of the current_block.
+    If the statement terminates the current block, it will assign the new block to the current_block but not set the insersion point.
     """
     def __init__(self):
         self.module: Optional[ir.Module] = None
-        self.current_block: Optional[ir.Block] = None
     
     # create constants
     def integer_constant(self, tp: ir.Type, value: int) -> ir.Value:
@@ -49,15 +48,6 @@ class MLIRBuilder(MLIRTypeBuilder):
     def cond_br(self, cond: ir.Value, true_block: ir.Block, false_block: ir.Block) -> None:
         llvm.cond_br(cond, true_dest_operands=[], false_dest_operands=[], true_dest=true_block, false_dest=false_block)
 
-    def if_statement(self, cond: ir.Value, true_branch: Callable[[], None]) -> None:
-        then_block = self.current_block.create_after()
-        else_block = then_block.create_after()
-        self.current_block = else_block
-
-        self.cond_br(cond, then_block, else_block)
-
-        with ir.InsertionPoint(then_block):
-            true_branch()
 
     def define_global_string(self, symbol: str, content: str) -> None:
         """ Define a global string symbol with the given content. """
@@ -66,17 +56,16 @@ class MLIRBuilder(MLIRTypeBuilder):
             self.module.body.append(parsed_op)
         
     # function
-    def function(self, name: str, params_type: Sequence[ir.Type], ret_type: ir.Type) -> list[ir.Value]:
+    def function(self, name: str, params_type: Sequence[ir.Type], ret_type: ir.Type) -> tuple[list[ir.Value], ir.Block]:
         func_op = llvm.func(name, function_type=self.as_attr(self.func_type(ret=ret_type, params=params_type)))
         func_op.attributes["llvm.emit_c_interface"] = ir.UnitAttr.get() 
 
         params = []
         entry_block = ir.Block.create_at_start(func_op.body)
-        self.current_block = entry_block
         for param_type in params_type:
             params.append(entry_block.add_argument(param_type, ir.Location.unknown()))
         
-        return params
+        return params, entry_block
 
 class TVMFFIBuilder(MLIRBuilder):
     TVMFFI_ERROR_SET_RAISED_FROM_C_STR_NAME = "TVMFFIErrorSetRaisedFromCStr"
@@ -122,16 +111,30 @@ class TVMFFIBuilder(MLIRBuilder):
 class FunctionGenerator(TVMFFIBuilder):
     def __init__(self, adapter: FunctionAdapter):
         self.adapter = adapter
+        self.current_block = None
+    
 
     def extract_var_values(self, params: Sequence[Param], num_args: ir.Value, args: ir.Value) -> dict[Var, ir.Value]:
+        # check the number of arguments
+        error_block = self.current_block.create_after()
+        subsequent_block = error_block.create_after()
         with ir.InsertionPoint(self.current_block):
-            self.if_statement(
+            self.cond_br(
                 cond=self.not_equal(num_args, self.i32(len(params))),
-                true_branch=lambda: self.raise_exception_and_return(
-                    exception_name="ValueError",
-                    err_message=f"Expects {len(params)} parameters"
-                )
+                true_block=error_block,
+                false_block=subsequent_block
             )
+        with ir.InsertionPoint(error_block):
+            self.raise_exception_and_return(
+                exception_name="ValueError",
+                err_message=f"Expects {len(params)} parameters"
+            )
+        self.current_block = subsequent_block
+
+        # extract the MLIR values of the LLVM function parameters
+        for i, param in enumerate(params):
+            pass
+            
         return {}
 
 
@@ -156,10 +159,12 @@ class FunctionGenerator(TVMFFIBuilder):
         with ir.InsertionPoint(module.body):
             self.define_tvm_ffi_error_set_raised_from_c_str()  
 
-            handle, args, num_args, result = self.function(
+            (handle, args, num_args, result), entry_block = self.function(
                 name=tvm_ffi_func_name, 
                 params_type=[self.ptr_type, self.ptr_type, self.i32_type, self.ptr_type], ret_type=self.i32_type
             )
+            self.current_block = entry_block
+
             # 2. get the parameter specification from the `adapter.get_param_spec()`
             param_spec: list[Param] = self.adapter.get_param_spec()
 
