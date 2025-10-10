@@ -21,8 +21,7 @@ def main():
     
     with ctx, ir.Location.unknown():
         module = ir.Module.create()
-        with ir.InsertionPoint(module.body):
-            generate_tvm_ffi_func("__tvm_ffi_add_one", adapter)
+        generate_tvm_ffi_func("__tvm_ffi_add_one", module, adapter)
 
     print(module)
     print("\nCompiling to shared library...")
