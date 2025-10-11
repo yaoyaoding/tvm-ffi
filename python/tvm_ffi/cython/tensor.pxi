@@ -275,33 +275,74 @@ _set_class_tensor(Tensor)
 _register_object_by_index(kTVMFFITensor, Tensor)
 
 
-cdef int _dltensor_test_wrapper_c_dlpack_from_pyobject(
-    void* obj, DLManagedTensorVersioned** out, TVMFFIStreamHandle* env_stream
+cdef int _dltensor_test_wrapper_from_pyobject(
+    void* obj, DLManagedTensorVersioned** out
 ) except -1:
+    """DLPackExchangeAPI: managed_tensor_from_py_object_no_sync"""
     cdef PyObject* py_obj = <PyObject*>obj
     cdef DLTensorTestWrapper wrapper = <DLTensorTestWrapper>py_obj
-    cdef TVMFFIStreamHandle current_stream
-    cdef DLManagedTensorVersioned* temp_managed_tensor
-    if env_stream != NULL:
-        env_stream[0] = TVMFFIEnvGetStream(
-            wrapper.tensor.cdltensor.device.device_type,
-            wrapper.tensor.cdltensor.device.device_id
-        )
-
     return TVMFFITensorToDLPackVersioned(wrapper.tensor.chandle, out)
 
 
-def _dltensor_test_wrapper_c_dlpack_from_pyobject_as_intptr():
-    cdef DLPackFromPyObject converter_func = _dltensor_test_wrapper_c_dlpack_from_pyobject
-    cdef void* temp_ptr = <void*>converter_func
-    cdef long long temp_int_ptr = <long long>temp_ptr
-    return temp_int_ptr
+cdef int _dltensor_test_wrapper_to_pyobject(
+    DLManagedTensorVersioned* tensor, void** out_py_object
+) except -1:
+    """DLPackExchangeAPI: managed_tensor_to_py_object_no_sync"""
+    cdef TVMFFIObjectHandle temp_chandle
+    if TVMFFITensorFromDLPackVersioned(tensor, 0, 0, &temp_chandle) != 0:
+        return -1
+    py_tensor = make_tensor_from_chandle(temp_chandle)
+    Py_INCREF(py_tensor)
+    out_py_object[0] = <void*>(<PyObject*>py_tensor)
+    return 0
+
+
+cdef int _dltensor_test_wrapper_current_work_stream(
+    int device_type, int32_t device_id, void** out_stream
+) except -1:
+    """DLPackExchangeAPI: current_work_stream"""
+    if device_type != kDLCPU:
+        out_stream[0] = <void*>TVMFFIEnvGetStream(device_type, device_id)
+    return 0
+
+
+# Module-level static DLPackExchangeAPI for DLTensorTestWrapper
+cdef DLPackExchangeAPI _dltensor_test_wrapper_static_api
+
+cdef const DLPackExchangeAPI* _dltensor_test_wrapper_get_exchange_api() noexcept:
+    """Get the static DLPackExchangeAPI instance for DLTensorTestWrapper."""
+    global _dltensor_test_wrapper_static_api
+
+    # Initialize header using macros from dlpack.h
+    _dltensor_test_wrapper_static_api.header.version.major = DLPACK_MAJOR_VERSION
+    _dltensor_test_wrapper_static_api.header.version.minor = DLPACK_MINOR_VERSION
+    _dltensor_test_wrapper_static_api.header.prev_api = NULL
+
+    # Initialize function pointers
+    _dltensor_test_wrapper_static_api.managed_tensor_allocator = NULL
+    _dltensor_test_wrapper_static_api.managed_tensor_from_py_object_no_sync = (
+        <DLPackManagedTensorFromPyObjectNoSync>_dltensor_test_wrapper_from_pyobject
+    )
+    _dltensor_test_wrapper_static_api.managed_tensor_to_py_object_no_sync = (
+        <DLPackManagedTensorToPyObjectNoSync>_dltensor_test_wrapper_to_pyobject
+    )
+    _dltensor_test_wrapper_static_api.dltensor_from_py_object_no_sync = NULL
+    _dltensor_test_wrapper_static_api.current_work_stream = (
+        <DLPackCurrentWorkStream>_dltensor_test_wrapper_current_work_stream
+    )
+
+    return &_dltensor_test_wrapper_static_api
+
+
+def _dltensor_test_wrapper_exchange_api_ptr():
+    """Return the pointer to the DLPackExchangeAPI struct as an integer."""
+    return <long long>_dltensor_test_wrapper_get_exchange_api()
 
 
 cdef class DLTensorTestWrapper:
     """Wrapper of a Tensor that exposes DLPack protocol, only for testing purpose.
     """
-    __c_dlpack_from_pyobject__ = _dltensor_test_wrapper_c_dlpack_from_pyobject_as_intptr()
+    __c_dlpack_exchange_api__ = _dltensor_test_wrapper_exchange_api_ptr()
 
     cdef Tensor tensor
     cdef dict __dict__
@@ -334,19 +375,21 @@ cdef inline object make_ret_dltensor(TVMFFIAny result):
     return tensor
 
 
-cdef inline object make_tensor_from_chandle(TVMFFIObjectHandle chandle, DLPackToPyObject c_dlpack_to_pyobject = NULL):
+cdef inline object make_tensor_from_chandle(
+    TVMFFIObjectHandle chandle, const DLPackExchangeAPI* c_ctx_dlpack_api = NULL
+):
     # TODO: Implement
     cdef Tensor tensor
     cdef void* py_obj
     cdef DLManagedTensorVersioned* dlpack
 
-    if c_dlpack_to_pyobject != NULL:
+    if c_ctx_dlpack_api != NULL and c_ctx_dlpack_api.managed_tensor_to_py_object_no_sync != NULL:
         # try convert and import into the environment array if possible
         if TVMFFITensorToDLPackVersioned(chandle, &dlpack) == 0:
             try:
                 # note that py_obj already holds an extra reference to the tensor
                 # so we need to decref it after the conversion
-                c_dlpack_to_pyobject(dlpack, &py_obj)
+                c_ctx_dlpack_api.managed_tensor_to_py_object_no_sync(dlpack, &py_obj)
                 tensor = <Tensor>(<PyObject*>py_obj)
                 Py_DECREF(tensor)
                 # decref original handle to prevent leak.
@@ -365,5 +408,5 @@ cdef inline object make_tensor_from_chandle(TVMFFIObjectHandle chandle, DLPackTo
     return tensor
 
 
-cdef inline object make_tensor_from_any(TVMFFIAny any, DLPackToPyObject c_dlpack_to_pyobject):
-    return make_tensor_from_chandle(any.v_ptr, c_dlpack_to_pyobject)
+cdef inline object make_tensor_from_any(TVMFFIAny any, const DLPackExchangeAPI* c_ctx_dlpack_api):
+    return make_tensor_from_chandle(any.v_ptr, c_ctx_dlpack_api)

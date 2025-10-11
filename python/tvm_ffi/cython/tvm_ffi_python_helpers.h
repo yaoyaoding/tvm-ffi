@@ -89,10 +89,8 @@ struct TVMFFIPyCallContext {
   void** temp_py_objects = nullptr;
   /*! \brief the number of temporary arguments */
   int num_temp_py_objects = 0;
-  /*! \brief the DLPack exporter, if any */
-  DLPackToPyObject c_dlpack_to_pyobject{nullptr};
-  /*! \brief the DLPack allocator, if any */
-  DLPackTensorAllocator c_dlpack_tensor_allocator{nullptr};
+  /*! \brief the DLPack exchange API, if any */
+  const DLPackExchangeAPI* c_dlpack_exchange_api{nullptr};
 };
 
 /*! \brief Argument setter for a given python argument. */
@@ -108,17 +106,10 @@ struct TVMFFIPyArgSetter {
   int (*func)(TVMFFIPyArgSetter* self, TVMFFIPyCallContext* call_ctx, PyObject* arg,
               TVMFFIAny* out);
   /*!
-   * \brief Optional DLPack exporter for for setters that leverages DLPack protocol.
+   * \brief Optional DLPackExchangeAPI struct pointer.
+   * This is the new struct-based approach that bundles all DLPack exchange functions.
    */
-  DLPackFromPyObject c_dlpack_from_pyobject{nullptr};
-  /*!
-   * \brief Optional DLPack importer for for setters that leverages DLPack protocol.
-   */
-  DLPackToPyObject c_dlpack_to_pyobject{nullptr};
-  /*!
-   * \brief Optional DLPack allocator for for setters that leverages DLPack protocol.
-   */
-  DLPackTensorAllocator c_dlpack_tensor_allocator{nullptr};
+  const DLPackExchangeAPI* c_dlpack_exchange_api{nullptr};
   /*!
    * \brief Invoke the setter.
    * \param call_ctx The call context.
@@ -273,13 +264,14 @@ class TVMFFIPyCallManager {
    * \param result The result of the function
    * \param c_api_ret_code The return code of the C-call
    * \param release_gil Whether to release the GIL
-   * \param optional_out_dlpack_importer The DLPack importer to be used for the result
+   * \param optional_out_ctx_dlpack_api The DLPack exchange API to be used for the result
    * \return 0 on when there is no python error, -1 on python error
    * \note When an error happens on FFI side, we should return 0 and set c_api_ret_code
    */
   TVM_FFI_INLINE int FuncCall(TVMFFIPyArgSetterFactory setter_factory, void* func_handle,
                               PyObject* py_arg_tuple, TVMFFIAny* result, int* c_api_ret_code,
-                              bool release_gil, DLPackToPyObject* optional_out_dlpack_importer) {
+                              bool release_gil,
+                              const DLPackExchangeAPI** optional_out_ctx_dlpack_api) {
     int64_t num_args = PyTuple_Size(py_arg_tuple);
     if (num_args == -1) return -1;
     try {
@@ -300,9 +292,10 @@ class TVMFFIPyCallManager {
         // setting failed, directly return
         if (c_api_ret_code[0] != 0) return 0;
       }
-      if (ctx.c_dlpack_tensor_allocator != nullptr) {
-        c_api_ret_code[0] =
-            TVMFFIEnvSetTensorAllocator(ctx.c_dlpack_tensor_allocator, 0, &prev_tensor_allocator);
+      if (ctx.c_dlpack_exchange_api != nullptr &&
+          ctx.c_dlpack_exchange_api->managed_tensor_allocator != nullptr) {
+        c_api_ret_code[0] = TVMFFIEnvSetTensorAllocator(
+            ctx.c_dlpack_exchange_api->managed_tensor_allocator, 0, &prev_tensor_allocator);
         if (c_api_ret_code[0] != 0) return 0;
       }
       // call the function
@@ -323,12 +316,13 @@ class TVMFFIPyCallManager {
           return -1;
         }
       }
-      if (prev_tensor_allocator != ctx.c_dlpack_tensor_allocator) {
+      if (ctx.c_dlpack_exchange_api != nullptr &&
+          prev_tensor_allocator != ctx.c_dlpack_exchange_api->managed_tensor_allocator) {
         c_api_ret_code[0] = TVMFFIEnvSetTensorAllocator(prev_tensor_allocator, 0, nullptr);
         if (c_api_ret_code[0] != 0) return 0;
       }
-      if (optional_out_dlpack_importer != nullptr && ctx.c_dlpack_to_pyobject != nullptr) {
-        *optional_out_dlpack_importer = ctx.c_dlpack_to_pyobject;
+      if (optional_out_ctx_dlpack_api != nullptr && ctx.c_dlpack_exchange_api != nullptr) {
+        *optional_out_ctx_dlpack_api = ctx.c_dlpack_exchange_api;
       }
       return 0;
     } catch (const std::exception& ex) {
@@ -379,13 +373,9 @@ class TVMFFIPyCallManager {
           parent_ctx->device_id = ctx.device_id;
           parent_ctx->stream = ctx.stream;
         }
-        // DLPack allocator
-        if (parent_ctx->c_dlpack_tensor_allocator == nullptr) {
-          parent_ctx->c_dlpack_tensor_allocator = ctx.c_dlpack_tensor_allocator;
-        }
-        // DLPack importer
-        if (parent_ctx->c_dlpack_to_pyobject == nullptr) {
-          parent_ctx->c_dlpack_to_pyobject = ctx.c_dlpack_to_pyobject;
+        // DLPack exchange API
+        if (parent_ctx->c_dlpack_exchange_api == nullptr) {
+          parent_ctx->c_dlpack_exchange_api = ctx.c_dlpack_exchange_api;
         }
       }
       return 0;
@@ -490,16 +480,16 @@ class TVMFFIPyCallManager {
  * \param result The result of the function
  * \param c_api_ret_code The return code of the function
  * \param release_gil Whether to release the GIL
- * \param out_dlpack_exporter The DLPack exporter to be used for the result
+ * \param out_ctx_dlpack_api The DLPack exchange API to be used for the result
  * \return 0 on success, nonzero on failure
  */
 TVM_FFI_INLINE int TVMFFIPyFuncCall(TVMFFIPyArgSetterFactory setter_factory, void* func_handle,
                                     PyObject* py_arg_tuple, TVMFFIAny* result, int* c_api_ret_code,
                                     bool release_gil = true,
-                                    DLPackToPyObject* out_dlpack_importer = nullptr) {
+                                    const DLPackExchangeAPI** out_ctx_dlpack_api = nullptr) {
   return TVMFFIPyCallManager::ThreadLocal()->FuncCall(setter_factory, func_handle, py_arg_tuple,
                                                       result, c_api_ret_code, release_gil,
-                                                      out_dlpack_importer);
+                                                      out_ctx_dlpack_api);
 }
 
 /*!
