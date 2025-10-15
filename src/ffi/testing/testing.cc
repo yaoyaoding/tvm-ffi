@@ -451,3 +451,5 @@ TVM_FFI_STATIC_INIT_BLOCK() {
 
 }  // namespace ffi
 }  // namespace tvm
+
+extern "C" TVM_FFI_DLL_EXPORT int TVMFFITestingDummyTarget() { return 0; }
