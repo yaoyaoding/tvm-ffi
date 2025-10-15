@@ -25,13 +25,7 @@ find_package(
   REQUIRED
 )
 
-# Ask tvm-ffi where it stores its exported CMake files.
-execute_process(
-  COMMAND "${Python_EXECUTABLE}" -m tvm_ffi.config --cmakedir
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE tvm_ffi_ROOT
-)
-# Pull in the tvm-ffi CMake targets so we can link against them below.
+# Find tvm-ffi automatically
 find_package(tvm_ffi CONFIG REQUIRED)
 
 # Build the CPU and C versions of the simple "add one" function that the examples call.
