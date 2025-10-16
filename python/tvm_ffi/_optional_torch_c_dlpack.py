@@ -30,6 +30,8 @@ This module will load slowly at first time due to JITing,
 subsequent calls will be much faster.
 """
 
+from __future__ import annotations
+
 import warnings
 from typing import Any
 
@@ -69,6 +71,7 @@ DLDataType getDLDataTypeForDLPackv1(const Tensor& t) {
     case ScalarType::UInt64:
       dtype.code = DLDataTypeCode::kDLUInt;
       break;
+#if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 6
     case ScalarType::Int1:
     case ScalarType::Int2:
     case ScalarType::Int3:
@@ -79,6 +82,7 @@ DLDataType getDLDataTypeForDLPackv1(const Tensor& t) {
     case ScalarType::Char:
       dtype.code = DLDataTypeCode::kDLInt;
       break;
+#endif
     case ScalarType::Double:
       dtype.code = DLDataTypeCode::kDLFloat;
       break;
