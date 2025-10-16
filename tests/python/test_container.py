@@ -15,11 +15,19 @@
 # specific language governing permissions and limitations
 # under the License.
 import pickle
-from collections.abc import Sequence
+import sys
 from typing import Any
 
 import pytest
 import tvm_ffi
+
+if sys.version_info >= (3, 9):
+    # PEP 585 generics
+    from collections.abc import Sequence
+else:  # Python 3.8
+    # workarounds for python 3.8
+    # typing-module generics (subscriptable on 3.8)
+    from typing import Sequence
 
 
 def test_array() -> None:
