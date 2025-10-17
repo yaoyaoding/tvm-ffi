@@ -306,18 +306,26 @@ class Tensor : public ObjectRef {
   }
 
   /*!
-   * \brief Get the size of the idx-th dimension.
+   * \brief Get the size of the idx-th dimension. If the idx is negative,
+   * it gets the size of last idx-th dimension.
    * \param idx The index of the size.
    * \return The size of the idx-th dimension.
    */
-  int64_t size(size_t idx) const { return get()->shape[idx]; }
+  int64_t size(int64_t idx) const {
+    const TensorObj* ptr = get();
+    return ptr->shape[idx >= 0 ? idx : (ptr->ndim + idx)];
+  }
 
   /*!
-   * \brief Get the stride of the idx-th dimension.
+   * \brief Get the stride of the idx-th dimension. If the idx is negative,
+   * it gets the stride of last idx-th dimension.
    * \param idx The index of the stride.
    * \return The stride of the idx-th dimension.
    */
-  int64_t stride(size_t idx) const { return get()->strides[idx]; }
+  int64_t stride(int64_t idx) const {
+    const TensorObj* ptr = get();
+    return ptr->strides[idx >= 0 ? idx : (ptr->ndim + idx)];
+  }
 
   /*!
    * \brief Get the number of elements in the Tensor.
@@ -473,6 +481,23 @@ class Tensor : public ObjectRef {
   using ContainerType = TensorObj;
   /// \endcond
 
+  // the following code are convenient APIs redirections created to provide aten-style api
+  /*!
+   * \brief This functions redirects to ndim().
+   * \return The number of dimensions in the Tensor.
+   */
+  inline int32_t dim() { return ndim(); }
+  /*!
+   * \brief This functions redirects to shape().
+   * \return The shape of the Tensor.
+   */
+  inline ShapeView sizes() const { return shape(); }
+  /*!
+   * \brief This functions redirects to IsContiguous().
+   * \return True if the Tensor is contiguous, false otherwise.
+   */
+  inline bool is_contiguous() const { return IsContiguous(); }
+
  protected:
   /*!
    * \brief Get const internal container pointer.
@@ -598,18 +623,20 @@ class TensorView {
   }
 
   /*!
-   * \brief Get the size of the idx-th dimension.
+   * \brief Get the size of the idx-th dimension. If the idx is negative,
+   * it gets the size of last idx-th dimension.
    * \param idx The index of the size.
    * \return The size of the idx-th dimension.
    */
-  int64_t size(size_t idx) const { return tensor_.shape[idx]; }
+  int64_t size(int64_t idx) const { return tensor_.shape[idx >= 0 ? idx : tensor_.ndim + idx]; }
 
   /*!
-   * \brief Get the stride of the idx-th dimension.
+   * \brief Get the stride of the idx-th dimension. If the idx is negative,
+   * it gets the stride of last idx-th dimension.
    * \param idx The index of the stride.
    * \return The stride of the idx-th dimension.
    */
-  int64_t stride(size_t idx) const { return tensor_.strides[idx]; }
+  int64_t stride(int64_t idx) const { return tensor_.strides[idx >= 0 ? idx : tensor_.ndim + idx]; }
 
   /*!
    * \brief Get the byte offset of the Tensor.
@@ -622,6 +649,23 @@ class TensorView {
    * \return True if the Tensor is contiguous, false otherwise.
    */
   bool IsContiguous() const { return tvm::ffi::IsContiguous(tensor_); }
+
+  // the following code are convenient APIs redirections created to provide aten-style api
+  /*!
+   * \brief This functions redirects to ndim().
+   * \return The number of dimensions in the Tensor.
+   */
+  inline int32_t dim() { return ndim(); }
+  /*!
+   * \brief This functions redirects to shape().
+   * \return The shape of the Tensor.
+   */
+  inline ShapeView sizes() const { return shape(); }
+  /*!
+   * \brief This functions redirects to IsContiguous().
+   * \return True if the Tensor is contiguous, false otherwise.
+   */
+  inline bool is_contiguous() const { return IsContiguous(); }
 
  private:
   DLTensor tensor_;
