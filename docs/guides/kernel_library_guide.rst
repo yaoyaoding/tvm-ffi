@@ -15,10 +15,10 @@ Tensor and TensorView
 Both ``ffi::Tensor`` and ``ffi::TensorView`` are designed to represent tensors in TVM FFI eco-system. The main difference is whether it is an owning tensor pointer.
 
 :ffi::Tensor:
- ``ffi::Tensor`` is a completely onwing tensor pointer, pointing to TVM FFI tensor object. TVM FFI handles the lifetime of ``ffi::Tensor`` by retaining a strong reference. 
+ ``ffi::Tensor`` is a completely onwing tensor pointer, pointing to TVM FFI tensor object. TVM FFI handles the lifetime of ``ffi::Tensor`` by retaining a strong reference.
 
 :ffi::TensorView:
- ``ffi::TensorView`` is a light weight non-owning tnesor pointer, pointeing to a TVM FFI tensor or external tensor object. TVM FFI does not retain its reference. So users are responsible for ensuring the lifetime of tensor object to which the ``ffi::TensorView`` points. 
+ ``ffi::TensorView`` is a light weight non-owning tnesor pointer, pointeing to a TVM FFI tensor or external tensor object. TVM FFI does not retain its reference. So users are responsible for ensuring the lifetime of tensor object to which the ``ffi::TensorView`` points.
 
 TVM FFI can automatically convert the input tensor at Python side, e.g. ``torch.Tensor``, to both ``ffi::Tensor`` or ``ffi::TensorView`` at C++ side, depends on the C++ function arguments. However, for more flexibility and better compatibility, we **recommand** to use ``ffi::TensorView`` in practice. Since some frameworks, like JAX, cannot provide strong referenced tensor, as ``ffi::Tensor`` expected.
 
