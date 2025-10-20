@@ -24,7 +24,7 @@ This guide serves as a quick start for shipping python version and framework agn
 Tensor
 ======
 
-In TVM FFI, we support two types of tensor constructs, ``ffi::Tensor`` and ``ffi::TensorView`` that can be used to represent a tensor from machine learning frameworks, such as PyTorch, XLA, JAX, and so on.
+TVM FFI provide minimal set of data structures to represent tensors from frameworks and allows us to build kernels for frameworks. In TVM FFI, we support two types of tensor constructs, ``ffi::Tensor`` and ``ffi::TensorView`` that can be used to represent a tensor from machine learning frameworks, such as PyTorch, XLA, JAX, and so on.
 
 Tensor and TensorView
 ---------------------
