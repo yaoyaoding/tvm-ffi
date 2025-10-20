@@ -63,7 +63,7 @@ TVM FFI provides several methods to allocate tensors, when dynamic tensor alloca
 FromEnvAlloc
  Usually TVM FFI works together with a ML framework with its own tensor allocator. ``FromEnvAlloc`` is tailor-made for this case, so that it is possible to use framework tensor allocator when allocating ``ffi::Tensor``. And TVM FFI automatically sets the framework tensor allocator when the corresponding framework tensor exists in FFI arguments. For example, when calling TVM FFI packed kernels, if there are any input arguments of type ``torch.Tensor`` at Python side, TVM FFI will bind the ``at::Empty`` as the global framework tensor allocator - ``TVMFFIEnvTensorAlloc``. Here is an example:
 
- .. code-block::c++
+ .. code-block:: c++
 
   void func(ffi::TensorView arg0, ffi::TensorView arg1, ...) {
    ffi::Tensor tensor0 = ffi::Tensor::FromEnvAlloc(TVMFFIEnvTensorAlloc, ...);
