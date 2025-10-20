@@ -19,45 +19,25 @@
 Kernel Library Guide
 ====================
 
-This guide serves as a quick start for composing a kernel from scratch, or migrating a kernel from externel frameworks. It covers the core concepts in TVM FFI, such as tensor, stream.
+This guide serves as a quick start for shipping python version and framework agnostic kernel libraries with TVM FFI.
 
 Tensor
 ======
 
-Tensor is the most important input for a kernel libaray. In PyTorch C++ extensions, kernel library usually takes ``at::Tensor`` as tensor input. In TVM FFI, we introduce two types of tensor, ``ffi::Tensor`` and ``ffi::TensorView``.
+In TVM FFI, we support two types of tensor constructs, ``ffi::Tensor`` and ``ffi::TensorView`` that can be used to represent a tensor from machine learning frameworks, such as PyTorch, XLA, JAX, and so on.
 
 Tensor and TensorView
 ---------------------
 
-Both ``ffi::Tensor`` and ``ffi::TensorView`` are designed to represent tensors in TVM FFI eco-system. The main difference is whether it is an owning tensor pointer.
+Both ``ffi::Tensor`` and ``ffi::TensorView`` are designed to represent tensors from ML frameworks that interact with the TVM FFI ABI. The main difference is whether it is an owning tensor structure.
 
-:ffi::Tensor:
- ``ffi::Tensor`` is a completely onwing tensor pointer, pointing to TVM FFI tensor object. TVM FFI handles the lifetime of ``ffi::Tensor`` by retaining a strong reference.
+ffi::Tensor
+ ``ffi::Tensor`` is a completely onwing tensor pointer, pointing to a TVM FFI tensor object. TVM FFI handles the lifetime of ``ffi::Tensor`` by retaining a strong reference.
 
-:ffi::TensorView:
- ``ffi::TensorView`` is a light weight non-owning tnesor pointer, pointeing to a TVM FFI tensor or external tensor object. TVM FFI does not retain its reference. So users are responsible for ensuring the lifetime of tensor object to which the ``ffi::TensorView`` points.
+ffi::TensorView
+ ``ffi::TensorView`` is non-owning view of an existing tensor. It is backed by ``DLTensor`` structure in DLPack. Since it is a non-owning view, it is the user's responsibility to ensure the lifetime of underlying tensor data and attributes of the viewed tensor object.
 
-TVM FFI can automatically convert the input tensor at Python side, e.g. ``torch.Tensor``, to both ``ffi::Tensor`` or ``ffi::TensorView`` at C++ side, depends on the C++ function arguments. However, for more flexibility and better compatibility, we **recommand** to use ``ffi::TensorView`` in practice. Since some frameworks, like JAX, cannot provide strong referenced tensor, as ``ffi::Tensor`` expected.
-
-Tensor as Argument
-------------------
-
-Typically, we expect that all tensors are pre-allocated at Python side and passed in via TVM FFI, including the output tensor. And TVM FFI will convert them into ``ffi::TensorView`` at runtime. For the optional arguments, ``ffi::Optional`` is the best practice. Here is an example of a kernel definition at C++ side and calling at Python side.
-
-.. code-block:: c++
-
- // Kernel definition
- void func(ffi::TensorView input, ffi::Optional<ffi::Tensor> optional_input, ffi::TensorView output, ffi::TensorView workspace);
-
-.. code-block:: python
-
- # Kernel calling
- input = torch.tensor(...)
- output = torch.empty(...)
- workspace = torch.empty(...)
- func(input, None, output, workspace)
-
-Ideally, we expect the kernel function to have ``void`` as return type. However, if it is necessary to return the ``ffi::Tensor`` anyway, please pay attention to convert the output ``ffi::Tensor`` to original tensor type at Python side, like ``torch.from_dlpack``.
+We **recommend** to use ``ffi::TensorView`` when possible, that helps us to support more cases, including cases where only view but not strong reference are passed, like XLA buffer. It is also more lightweight.
 
 Tensor Attributes
 -----------------
@@ -66,21 +46,37 @@ For the sake of convenience, ``ffi::TensorView`` and ``ffi::Tensor`` align the f
 
 ``dim``, ``sizes``, ``size``, ``strides``, ``stride``, ``numel``, ``data_ptr``, ``device``, ``is_contiguous``
 
-:DLDataType:
+DLDataType
  In TVM FFI, tensor data types are stored as ``DLDataType`` which is defined by DLPack protocol.
 
-:DLDevice:
+DLDevice
  In TVM FFI, tensor device information are stored as ``DLDevice`` which is defined by DLPack protocol.
 
-:ShapeView:
+ShapeView
  In TVM FFI, tensor shapes and strides attributes retrieval are returned as ``ShapeView``. It is an iterate-able data structure storing the shapes or strides data as ``int64_t`` array.
 
 Tensor Allocation
 -----------------
 
-Sometimes we have to allocate the tensor within the kernel. TVM FFI provides several methods to allocate tensors.
+TVM FFI provides several methods to allocate tensors, when dynamic tensor allocation is necessary.
 
-:FromNDAlloc:
+FromEnvAlloc
+ Usually TVM FFI works together with a ML framework with its own tensor allocator. ``FromEnvAlloc`` is tailor-made for this case, so that it is possible to use framework tensor allocator when allocating ``ffi::Tensor``. And TVM FFI automatically sets the framework tensor allocator when the corresponding framework tensor exists in FFI arguments. For example, when calling TVM FFI packed kernels, if there are any input arguments of type ``torch.Tensor`` at Python side, TVM FFI will bind the ``at::Empty`` as the global framework tensor allocator - ``TVMFFIEnvTensorAlloc``. Here is an example:
+
+ .. code-block::
+
+  void func(ffi::TensorView arg0, ffi::TensorView arg1, ...) {
+   ffi::Tensor tensor0 = ffi::Tensor::FromEnvAlloc(TVMFFIEnvTensorAlloc, ...);
+   ffi::Tensor tensor1 = ffi::Tensor::FromDLPackVersioned(at::toDLPackImpl<DLManagedTensorVersioned>(at::empty(...)))
+   // tensor0 and tensor1 are equivalent once arg{i} at Python side has type of torch.Tensor.
+  }
+
+ We **recommend** to use ``FromEnvAlloc`` when possible, since the framework tensor allocator has adavantages:
+
+ * Benefit from the framework's native caching allocator or related mechanism.
+ * Help framework tracking memory usage and planning globally.
+
+FromNDAlloc
  ``FromNDAlloc`` is the most basic tensor allocator. Besides of the basic attributes like shape, data type and device, it requires a custom allocator struct to handle the allocation and free. The allocator must consist of ``void AllocData(DLTensor*)`` and ``void FreeData(DLTensor*)`` methods. Here are the examples of CPU, CUDA and NVSHMEM allocation:
 
  .. code-block:: c++
@@ -124,23 +120,43 @@ Sometimes we have to allocate the tensor within the kernel. TVM FFI provides sev
   ffi::Tensor cuda_tensor = ffi::Tensor::FromNDAlloc(CUDANDAlloc(), ...);
   ffi::Tensor nvshmem_tensor = ffi::Tensor::FromNDAlloc(NVSHMEMNDAlloc(), ...);
 
-:FromEnvAlloc:
- For the case of using external tensor allocator, like``at::empty`` in PyTorch C++ extensions, ``FromEnvAlloc`` is the better choice. Besides of the basic attributes like shape, data type and device, it requires a thread-local environmental allocator ``TVMFFIEnvTensorAlloc``. ``TVMFFIEnvTensorAlloc`` gets the global tensor allocator in the current context. The context can be switched based on the arguments of the kernel.
+FromDLPack
+ ``FromDLPack`` enables creating ``ffi::Tensor`` from ``DLManagedTensor*``, working with ``ToDLPack`` for DLPack C Tensor Object ``DLTensor`` exchange protocol. Both are used for DLPack pre V1.0 API.
 
-:FromDLPack:
- ``FromDLPack`` enables creating ``ffi::Tensor`` from ``DLManagedTensor*``.
+FromDLPackVersioned
+ ``FromDLPackVersioned`` enables creating ``ffi::Tensor`` from ``DLManagedTensorVersioned*``, working with ``ToDLPackVersioned`` for DLPack C Tensor Object ``DLTensor`` exchange protocol. Both are used for DLPack post V1.0 API.
 
-:FromDLPackVersioned:
- ``FromDLPackVersioned`` enables creating ``ffi::Tensor`` from ``DLManagedTensorVersioned*``.
+Tensor Passing FFI
+------------------
+
+TVM FFI does two conversions when calling the compiled kernels to pass the tensor across FFI. It first converts the framework tensor at Python side to ``ffi::Tensor`` or ``ffi::TensorView``. And then it converts the output ``ffi::Tensor`` back to the framework tensor at Python side. When converting back, TVM FFI will convert to the same framework as arguments. If there are no framework tensors provided in the arguments, TVM FFI will output tensors with the type of ``tvm_ffi.core.Tensor`` still.
+
+Actually, in practie, we **recommend** that all input and output tensors are pre-allocated at Python side by framework alreadly. As for the optional arguments, use ``ffi::Optional`` as wrapper. So, for the kernel function, it returns nothing with a ``void`` return type. Here is a paradigm of TVM FFI interact with Pytorch:
+
+.. code-block:: c++
+
+ // Kernel definition
+ void func(ffi::TensorView input, ffi::Optional<ffi::Tensor> optional_input, ffi::TensorView output, ffi::TensorView workspace);
+
+.. code-block:: python
+
+ # Kernel calling
+ input: torch.Tensor = ...
+ output: torch.Tensor = ...
+ workspace: torch.Tensor = ...
+ func(input, None, output, workspace)
 
 Stream
 ======
 
-TVM FFI maintains the stream context per device type and index. Use ``TVMFFIEnvGetStream`` to get the current stream on device:
+TVM FFI maintains the stream context per device type and index. And TVM FFI automatically updates the context stream when handling the arguments. For example, if there is an argument of ``torch.Tensor(device="cuda:3")``, TVM FFI will set the current stream of cuda device 3 from torch current context stream. Then at C++ side, use ``TVMFFIEnvGetStream`` to get the current stream on the specific device. Here is an example:
 
 .. code-block:: c++
 
- ffi::DLDevice device = input.device();
- cudaStream_t stream = reinterpret_cast<cudaStream_t>(TVMFFIEnvGetStream(device.device_type, device.device_id));
-
-Similar to ``TVMFFIEnvTensorAlloc``, TVM FFI updates the context stream based on the arguments of the kernel, by calling ``TVMFFIEnvSetStream``.
+ void func(ffi::TensorView arg0, ...) {
+  ffi::DLDevice device = arg0.device();
+  cudaStream_t stream0 = reinterpret_cast<cudaStream_t>(TVMFFIEnvGetStream(device.device_type, device.device_id));
+  cudaStream_t stream1 = reinterpret_cast<cudaStream_t>(at::cuda::getCurrentCUDAStream(device.device_id).stream());
+  // stream0 and stream1 are the same cuda stream handle once arg0 is of type torch.Tensor at Python side, or any other torch.Tensor arguments at PYthon side are on the same device as arg0.
+ }
+ 
