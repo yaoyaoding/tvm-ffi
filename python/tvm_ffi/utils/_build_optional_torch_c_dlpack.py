@@ -782,8 +782,8 @@ def main() -> None:  # noqa: PLR0912, PLR0915
             for python_libdir in python_libdir_list:
                 if python_libdir and (Path(python_libdir) / python_lib).exists():
                     ldflags.append(f"/LIBPATH:{python_libdir.replace(':', '$:')}")
-                    # ldflags.append(python_lib)
                     break
+
         if IS_DARWIN:
             python_libdir = sysconfig.get_config_var("LIBDIR")
             if python_libdir:
