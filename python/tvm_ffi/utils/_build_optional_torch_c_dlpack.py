@@ -759,36 +759,36 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         # Add all required PyTorch libraries
         if IS_WINDOWS:
             # On Windows, use .lib format for linking
-            ldflags.extend(["c10.lib", "torch.lib", "torch_cpu.lib", "torch_python.lib"])
+            ldflags.extend(["c10.lib", "torch.lib", "torch_cpu.lib"])
         else:
             # On Unix/macOS, use -l format for linking
-            ldflags.extend(["-lc10", "-ltorch", "-ltorch_cpu", "-ltorch_python"])
+            ldflags.extend(["-lc10", "-ltorch", "-ltorch_cpu"])
 
         # Add Python library linking
-        if IS_WINDOWS:
-            python_lib = f"python{sys.version_info.major}.lib"
-            python_libdir_list = [
-                sysconfig.get_config_var("LIBDIR"),
-                sysconfig.get_path("include"),
-            ]
-            if (
-                sysconfig.get_path("include") is not None
-                and (Path(sysconfig.get_path("include")).parent / "libs").exists()
-            ):
-                python_libdir_list.append(
-                    str((Path(sysconfig.get_path("include")).parent / "libs").resolve())
-                )
-            for python_libdir in python_libdir_list:
-                if python_libdir and (Path(python_libdir) / python_lib).exists():
-                    ldflags.append(f"/LIBPATH:{python_libdir.replace(':', '$:')}")
-                    ldflags.append(python_lib)
-                    break
-        else:
-            python_libdir = sysconfig.get_config_var("LIBDIR")
-            if python_libdir:
-                ldflags.append(f"-L{python_libdir}")
-                py_version = f"python{sysconfig.get_python_version()}"
-                ldflags.append(f"-l{py_version}")
+        # if IS_WINDOWS:
+        #     python_lib = f"python{sys.version_info.major}.lib"
+        #     python_libdir_list = [
+        #         sysconfig.get_config_var("LIBDIR"),
+        #         sysconfig.get_path("include"),
+        #     ]
+        #     if (
+        #         sysconfig.get_path("include") is not None
+        #         and (Path(sysconfig.get_path("include")).parent / "libs").exists()
+        #     ):
+        #         python_libdir_list.append(
+        #             str((Path(sysconfig.get_path("include")).parent / "libs").resolve())
+        #         )
+        #     for python_libdir in python_libdir_list:
+        #         if python_libdir and (Path(python_libdir) / python_lib).exists():
+        #             ldflags.append(f"/LIBPATH:{python_libdir.replace(':', '$:')}")
+        #             ldflags.append(python_lib)
+        #             break
+        # else:
+        #     python_libdir = sysconfig.get_config_var("LIBDIR")
+        #     if python_libdir:
+        #         ldflags.append(f"-L{python_libdir}")
+        #         py_version = f"python{sysconfig.get_python_version()}"
+        #         ldflags.append(f"-l{py_version}")
 
         # generate ninja build file
         _generate_ninja_build(
