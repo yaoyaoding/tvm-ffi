@@ -789,6 +789,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         #         ldflags.append(f"-L{python_libdir}")
         #         py_version = f"python{sysconfig.get_python_version()}"
         #         ldflags.append(f"-l{py_version}")
+        # link python library on macos
+        if sys.platform == "darwin":
+            python_libdir = sysconfig.get_config_var("LIBDIR")
+            if python_libdir:
+                ldflags.append(f"-L{python_libdir}")
+                py_version = f"python{sysconfig.get_python_version()}"
+                ldflags.append(f"-l{py_version}")
 
         # generate ninja build file
         _generate_ninja_build(
