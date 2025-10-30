@@ -34,6 +34,7 @@ import torch.utils.cpp_extension
 # Important: to avoid cyclic dependency, we avoid import tvm_ffi names at top level here.
 
 IS_WINDOWS = sys.platform == "win32"
+IS_DARWIN = sys.platform == "darwin"
 
 cpp_source = """
 #include <dlpack/dlpack.h>
@@ -783,12 +784,12 @@ def main() -> None:  # noqa: PLR0912, PLR0915
                     ldflags.append(f"/LIBPATH:{python_libdir.replace(':', '$:')}")
                     # ldflags.append(python_lib)
                     break
-        # else:
-        #     python_libdir = sysconfig.get_config_var("LIBDIR")
-        #     if python_libdir:
-        #         ldflags.append(f"-L{python_libdir}")
-        #         py_version = f"python{sysconfig.get_python_version()}"
-        #         ldflags.append(f"-l{py_version}")
+        if IS_DARWIN:
+            python_libdir = sysconfig.get_config_var("LIBDIR")
+            if python_libdir:
+                py_version = f"python{sysconfig.get_python_version()}"
+                ldflags.append(f"-L{python_libdir}")
+                ldflags.append(f"-l{py_version}")
 
         # generate ninja build file
         _generate_ninja_build(
