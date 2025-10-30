@@ -791,6 +791,7 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         #         ldflags.append(f"-l{py_version}")
         # link python library on macos
         if sys.platform == "darwin":
+            ldflags.append("-ltorch_python")
             python_libdir = sysconfig.get_config_var("LIBDIR")
             if python_libdir:
                 ldflags.append(f"-L{python_libdir}")
