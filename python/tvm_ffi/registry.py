@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Callable, Literal, overload
+from typing import Any, Callable, Literal, TypeVar, overload
 
 from . import core
 from .core import TypeInfo
@@ -29,7 +29,10 @@ from .core import TypeInfo
 _SKIP_UNKNOWN_OBJECTS = False
 
 
-def register_object(type_key: str | type | None = None) -> Callable[[type], type] | type:
+_T = TypeVar("_T", bound=type)
+
+
+def register_object(type_key: str | None = None) -> Callable[[_T], _T]:
     """Register object type.
 
     Parameters
@@ -51,7 +54,7 @@ def register_object(type_key: str | type | None = None) -> Callable[[type], type
 
     """
 
-    def _register(cls: type, object_name: str) -> type:
+    def _register(cls: _T, object_name: str) -> _T:
         """Register the object type with the FFI core."""
         type_index = core._object_type_key_to_index(object_name)
         if type_index is None:
@@ -65,12 +68,12 @@ def register_object(type_key: str | type | None = None) -> Callable[[type], type
 
     if isinstance(type_key, str):
 
-        def _decorator_with_name(cls: type) -> type:
+        def _decorator_with_name(cls: _T) -> _T:
             return _register(cls, type_key)
 
         return _decorator_with_name
 
-    def _decorator_default(cls: type) -> type:
+    def _decorator_default(cls: _T) -> _T:
         return _register(cls, cls.__name__)
 
     if type_key is None:
