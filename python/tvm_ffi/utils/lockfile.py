@@ -76,7 +76,12 @@ class FileLock:
         Returns
         -------
         ret: bool
-            True if the lock was acquired by this call, False otherwise.
+            True if the lock was acquired, False otherwise.
+
+        Raises
+        ------
+        RuntimeError
+            If an unexpected error occurs during lock acquisition.
 
         """
         try:
@@ -107,7 +112,7 @@ class FileLock:
 
         Parameters
         ----------
-        timeout: float:
+        timeout: float, optional
             The maximum time to wait for the lock in seconds.  A value of None means wait indefinitely.
         poll_interval: float
             The time to wait between lock attempts in seconds.
@@ -115,9 +120,18 @@ class FileLock:
         Returns
         -------
         ret: bool
-            True if the lock was acquired, False otherwise.
+            True if the lock was acquired.
+
+        Raises
+        ------
+        TimeoutError
+            If the lock is not acquired within the timeout period.
+        RuntimeError
+            If the lock is already held by this instance.
 
         """
+        if self._file_descriptor is not None:
+            raise RuntimeError("Lock is already held by this instance.")
         start_time = time.time()
         while True:
             if self.acquire():

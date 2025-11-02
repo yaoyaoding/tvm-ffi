@@ -87,40 +87,6 @@ def test_exception_in_context_manager() -> None:
         lock2.release()
 
 
-concurrent_worker_script = '''
-import sys
-import time
-import random
-from pathlib import Path
-from tvm_ffi.utils.lockfile import FileLock
-
-def worker(worker_id, lock_path, counter_file):
-    """Worker function that tries to acquire lock and increment counter."""
-    try:
-        with FileLock(lock_path):
-            # Critical section - read, increment, write counter
-            with open(counter_file, 'r') as f:
-                current_value = int(f.read().strip())
-
-            time.sleep(random.uniform(0.01, 0.1))  # Simulate some work
-
-            with open(counter_file, 'w') as f:
-                f.write(str(current_value + 1))
-
-            print(f"Worker {worker_id}: success")
-            return 0
-    except Exception as e:
-        print(f"Worker {worker_id}: error: {e}")
-        return 1
-
-if __name__ == "__main__":
-    worker_id = int(sys.argv[1])
-    lock_path = sys.argv[2]
-    counter_file = sys.argv[3]
-    sys.exit(worker(worker_id, lock_path, counter_file))
-'''
-
-
 def test_concurrent_access() -> None:
     """Test concurrent access from multiple processes."""
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -133,8 +99,7 @@ def test_concurrent_access() -> None:
         # Create worker script content
 
         # Write worker script to a temporary file
-        worker_script_path = Path(temp_dir) / "worker.py"
-        worker_script_path.write_text(concurrent_worker_script)
+        worker_script_path = Path(__file__).parent / "filelock_worker.py"
 
         # Run multiple worker processes concurrently
         num_workers = 16
@@ -147,13 +112,11 @@ def test_concurrent_access() -> None:
 
         # Wait for all processes to complete
         for p in processes:
-            p.wait(timeout=num_workers)  # wait for `num_workers` seconds at most
+            p.wait(timeout=num_workers * 0.5)
             assert p.returncode == 0, f"Worker process failed with return code {p.returncode}"
 
         # Check final counter value
         final_count = int(counter_file.read_text().strip())
-
-        print(final_count, file=sys.stderr)
 
         # Counter should equal number of workers (no race conditions)
         assert final_count == num_workers
