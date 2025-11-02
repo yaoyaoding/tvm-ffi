@@ -71,7 +71,11 @@ class FileLock:
     def acquire(self) -> bool:
         """Acquire an exclusive, non-blocking lock on the file.
 
-        Returns True if the lock was acquired by this call, False otherwise.
+        Returns
+        -------
+        ret: bool
+            True if the lock was acquired by this call, False otherwise.
+
         """
         try:
             if self._file_descriptor is not None:
@@ -96,17 +100,20 @@ class FileLock:
                 self._file_descriptor = None
             raise RuntimeError(f"An unexpected error occurred: {e}")
 
-    def acquired(self) -> bool:
-        """Check if the lock is currently acquired."""
-        return self._file_descriptor is not None
-
     def blocking_acquire(self, timeout: float | None = None, poll_interval: float = 0.1) -> bool:
         """Wait until an exclusive lock can be acquired, with an optional timeout.
 
-        Args:
-            timeout (float): The maximum time to wait for the lock in seconds.
-                             A value of None means wait indefinitely.
-            poll_interval (float): The time to wait between lock attempts in seconds.
+        Parameters
+        ----------
+        timeout: float:
+            The maximum time to wait for the lock in seconds.  A value of None means wait indefinitely.
+        poll_interval: float
+            The time to wait between lock attempts in seconds.
+
+        Returns
+        -------
+        ret: bool
+            True if the lock was acquired, False otherwise.
 
         """
         start_time = time.time()

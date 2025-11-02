@@ -116,9 +116,8 @@ from tvm_ffi.utils.lockfile import FileLock
 
 def worker(worker_id, lock_path, counter_file):
     """Worker function that tries to acquire lock and increment counter."""
-    lock = FileLock(lock_path)
     try:
-        if lock.blocking_acquire(timeout=15.0):
+        with FileLock(lock_path):
             # Critical section - read, increment, write counter
             with open(counter_file, 'r') as f:
                 current_value = int(f.read().strip())
@@ -128,12 +127,8 @@ def worker(worker_id, lock_path, counter_file):
             with open(counter_file, 'w') as f:
                 f.write(str(current_value + 1))
 
-            lock.release()
             print(f"Worker {worker_id}: success")
             return 0
-        else:
-            print(f"Worker {worker_id}: timeout")
-            return 1
     except Exception as e:
         print(f"Worker {worker_id}: error: {e}")
         return 1
@@ -172,7 +167,7 @@ def test_concurrent_access() -> None:
 
         # Wait for all processes to complete
         for p in processes:
-            p.wait()
+            p.wait(timeout=num_workers)  # wait for `num_workers` seconds at most
             assert p.returncode == 0, f"Worker process failed with return code {p.returncode}"
 
         # Check final counter value
