@@ -54,26 +54,6 @@ def test_context_manager() -> None:
         # Note: file may still exist but should be unlocked
 
 
-def test_exclusive_locking() -> None:
-    """Test that locks are mutually exclusive."""
-    with tempfile.TemporaryDirectory() as temp_dir:
-        lock_path = Path(temp_dir) / "test.lock"
-
-        lock1 = FileLock(str(lock_path))
-        lock2 = FileLock(str(lock_path))
-
-        # First lock should succeed
-        assert lock1.acquire() is True
-
-        # Second lock should fail (non-blocking)
-        assert lock2.acquire() is False
-
-        # After releasing first lock, second should succeed
-        lock1.release()
-        assert lock2.acquire() is True
-        lock2.release()
-
-
 def test_multiple_acquire_attempts() -> None:
     """Test multiple acquire attempts on the same lock instance."""
     with tempfile.TemporaryDirectory() as temp_dir:

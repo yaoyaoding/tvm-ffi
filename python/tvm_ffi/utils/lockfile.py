@@ -34,7 +34,9 @@ class FileLock:
     """Provide a cross-platform file locking mechanism using Python's stdlib.
 
     This class implements an advisory lock, which must be respected by all
-    cooperating processes.
+    cooperating processes. Please note that this lock does not prevent the same process
+    from acquiring the lock multiple times; it is the caller's responsibility to
+    manage this.
 
     Examples
     --------
