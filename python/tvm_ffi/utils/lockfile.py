@@ -71,9 +71,11 @@ class FileLock:
     def acquire(self) -> bool:
         """Acquire an exclusive, non-blocking lock on the file.
 
-        Returns True if the lock was acquired, False otherwise.
+        Returns True if the lock was acquired by this call, False otherwise.
         """
         try:
+            if self._file_descriptor is not None:
+                return False  # Lock is already held by this instance
             if sys.platform == "win32":
                 self._file_descriptor = os.open(
                     self.lock_file_path, os.O_RDWR | os.O_CREAT | os.O_BINARY
@@ -93,6 +95,10 @@ class FileLock:
                 os.close(self._file_descriptor)
                 self._file_descriptor = None
             raise RuntimeError(f"An unexpected error occurred: {e}")
+
+    def acquired(self) -> bool:
+        """Check if the lock is currently acquired."""
+        return self._file_descriptor is not None
 
     def blocking_acquire(self, timeout: float | None = None, poll_interval: float = 0.1) -> bool:
         """Wait until an exclusive lock can be acquired, with an optional timeout.
