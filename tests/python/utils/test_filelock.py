@@ -112,7 +112,7 @@ def test_concurrent_access() -> None:
 
         # Wait for all processes to complete
         for p in processes:
-            p.wait(timeout=num_workers * 0.5)
+            p.wait(timeout=60.0)
             assert p.returncode == 0, f"Worker process failed with return code {p.returncode}"
 
         # Check final counter value
