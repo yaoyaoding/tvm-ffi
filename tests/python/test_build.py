@@ -14,13 +14,28 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""C++ integration helpers for building and loading inline modules."""
+import pathlib
 
-from .extension import build, build_inline, load, load_inline
+import numpy
+import pytest
+import tvm_ffi.cpp
+from tvm_ffi.module import Module
 
-__all__ = [
-    "build",
-    "build_inline",
-    "load",
-    "load_inline",
-]
+
+def test_build_cpp() -> None:
+    cpp_path = pathlib.Path(__file__).parent.resolve() / "test_build.cc"
+    output_lib_path = tvm_ffi.cpp.build(
+        name="hello",
+        cpp_files=[str(cpp_path)],
+    )
+
+    mod: Module = tvm_ffi.load_module(output_lib_path)
+
+    x = numpy.array([1, 2, 3, 4, 5], dtype=numpy.float32)
+    y = numpy.empty_like(x)
+    mod.add_one_cpu(x, y)
+    numpy.testing.assert_equal(x + 1, y)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
