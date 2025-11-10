@@ -27,18 +27,20 @@
 #include <tvm/ffi/function.h>
 
 // Simple addition function
-TVM_FFI_DLL_EXPORT_TYPED_FUNC(add, [](int a, int b) { return a + b; });
+int add_impl(int a, int b) { return a + b; }
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(add, add_impl);
 
 // Multiplication function
-TVM_FFI_DLL_EXPORT_TYPED_FUNC(multiply, [](int a, int b) { return a * b; });
+int multiply_impl(int a, int b) { return a * b; }
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(multiply, multiply_impl);
 
 // Fibonacci function (recursive)
 int fib_impl(int n) {
   if (n <= 1) return n;
   return fib_impl(n - 1) + fib_impl(n - 2);
 }
-
-TVM_FFI_DLL_EXPORT_TYPED_FUNC(fibonacci, [](int n) { return fib_impl(n); });
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(fibonacci, fib_impl);
 
 // String concatenation example
-TVM_FFI_DLL_EXPORT_TYPED_FUNC(concat, [](std::string a, std::string b) { return a + b; });
+std::string concat_impl(std::string a, std::string b) { return a + b; }
+TVM_FFI_DLL_EXPORT_TYPED_FUNC(concat, concat_impl);
