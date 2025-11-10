@@ -30,6 +30,7 @@ Example:
 
 """
 
+import ctypes
 import platform
 import sys
 from pathlib import Path
@@ -44,17 +45,20 @@ elif platform.system() == "Windows":
 else:
     _LIB_EXT = "so"
 
-# Load the orcjit extension library to register functions
+# Load the orcjit extension library
 _LIB_PATH = Path(__file__).parent.parent.parent / f"libtvm_ffi_orcjit.{_LIB_EXT}"
+_lib_path_str = None
 if _LIB_PATH.exists():
-    load_module(str(_LIB_PATH))
+    _lib_module = load_module(str(_LIB_PATH))
+    _lib_path_str = str(_LIB_PATH)
 else:
     # Fallback: search in site-packages (installed location)
     found = False
     for site_pkg in sys.path:
         candidate = Path(site_pkg) / f"libtvm_ffi_orcjit.{_LIB_EXT}"
         if candidate.exists():
-            load_module(str(candidate))
+            _lib_module = load_module(str(candidate))
+            _lib_path_str = str(candidate)
             found = True
             break
 
@@ -64,6 +68,19 @@ else:
             f"Searched in {_LIB_PATH} and site-packages. "
             f"Please ensure the package is installed correctly."
         )
+
+# Explicitly initialize the library to register functions
+# This is needed because static initializers may not run when loaded via dlopen
+try:
+    # Load the library with ctypes and call the initialization function
+    c_lib = ctypes.CDLL(_lib_path_str, mode=ctypes.RTLD_GLOBAL)
+    init_func = c_lib.TVMFFIOrcJITInitialize
+    init_func.restype = None
+    init_func()
+except Exception as e:
+    import warnings
+
+    warnings.warn(f"Failed to explicitly initialize orcjit library: {e}")
 
 from .dylib import DynamicLibrary
 from .session import ExecutionSession, create_session

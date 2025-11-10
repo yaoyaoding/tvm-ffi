@@ -27,6 +27,7 @@
 #include <llvm/Object/ObjectFile.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/MemoryBuffer.h>
+#include <tvm/ffi/c_api.h>
 #include <tvm/ffi/cast.h>
 #include <tvm/ffi/error.h>
 #include <tvm/ffi/extra/module.h>
@@ -145,7 +146,11 @@ class DynamicLibraryModuleObj : public ModuleObj {
 // Registration
 //-------------------------------------
 
-TVM_FFI_STATIC_INIT_BLOCK() {
+static void RegisterOrcJITFunctions() {
+  static bool registered = false;
+  if (registered) return;
+  registered = true;
+
   namespace refl = tvm::ffi::reflection;
 
   refl::GlobalDef()
@@ -169,6 +174,18 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       });
 }
 
+TVM_FFI_STATIC_INIT_BLOCK() {
+  // This block may not execute when loaded via dlopen on some platforms.
+  // Call TVMFFIOrcJITInitialize() explicitly if functions are not registered.
+  RegisterOrcJITFunctions();
+}
+
 }  // namespace orcjit
 }  // namespace ffi
 }  // namespace tvm
+
+// C API for explicit initialization
+extern "C" {
+
+TVM_FFI_DLL_EXPORT void TVMFFIOrcJITInitialize() { tvm::ffi::orcjit::RegisterOrcJITFunctions(); }
+}
