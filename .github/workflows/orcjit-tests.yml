@@ -85,6 +85,12 @@ jobs:
         run: |
           uv pip install pytest --system
 
+      - name: Build test object files
+        working-directory: addons/tvm-ffi-orcjit/tests
+        run: |
+          cmake -B build
+          cmake --build build
+
       - name: Run tests
         working-directory: addons/tvm-ffi-orcjit
         run: |
