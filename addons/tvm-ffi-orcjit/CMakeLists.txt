@@ -29,11 +29,20 @@ set(TVM_FFI_ROOT
 if (EXISTS "${TVM_FFI_ROOT}/include/tvm/ffi/c_api.h")
   message(STATUS "Using tvm-ffi from: ${TVM_FFI_ROOT}")
 
+  # Determine the library extension based on platform
+  if (APPLE)
+    set(TVM_FFI_LIB_EXT "dylib")
+  elseif (WIN32)
+    set(TVM_FFI_LIB_EXT "dll")
+  else ()
+    set(TVM_FFI_LIB_EXT "so")
+  endif ()
+
   # Create imported target for tvm_ffi
   add_library(tvm_ffi SHARED IMPORTED)
   set_target_properties(
     tvm_ffi
-    PROPERTIES IMPORTED_LOCATION "${TVM_FFI_ROOT}/build/lib/libtvm_ffi.so"
+    PROPERTIES IMPORTED_LOCATION "${TVM_FFI_ROOT}/build/lib/libtvm_ffi.${TVM_FFI_LIB_EXT}"
                INTERFACE_INCLUDE_DIRECTORIES
                "${TVM_FFI_ROOT}/include;${TVM_FFI_ROOT}/3rdparty/dlpack/include"
   )
