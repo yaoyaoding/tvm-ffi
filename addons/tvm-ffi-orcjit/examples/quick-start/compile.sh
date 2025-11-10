@@ -31,7 +31,7 @@ echo -e "${GREEN}Compiling add.cc to object file...${NC}"
 if ! command -v tvm-ffi-config &> /dev/null; then
     echo -e "${RED}Error: tvm-ffi-config not found${NC}"
     echo "Make sure apache-tvm-ffi is installed:"
-    echo "  pip install -e ../../3rdparty/tvm-ffi"
+    echo "  pip install -e ../../../"
     exit 1
 fi
 
