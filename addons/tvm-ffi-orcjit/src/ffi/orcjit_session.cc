@@ -24,6 +24,9 @@
 
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
+#include <llvm/IR/GlobalVariable.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/Error.h>
 #include <llvm/Support/TargetSelect.h>
 #include <tvm/ffi/cast.h>
@@ -48,9 +51,6 @@ struct LLVMInitializer {
 };
 
 static LLVMInitializer llvm_initializer;
-
-// Provide __dso_handle for C++ runtime
-static char dso_handle_storage;
 
 ORCJITExecutionSession::ORCJITExecutionSession() : jit_(nullptr), dylib_counter_(0) {}
 
@@ -99,14 +99,33 @@ ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSession::CreateDynamicLibrary(con
   }
   jd.addGenerator(std::move(*dlsg));
 
-  // Add __dso_handle as a weak symbol (use static storage)
-  auto& es = jit_->getExecutionSession();
-  auto dso_symbol = llvm::orc::ExecutorSymbolDef(
-      llvm::orc::ExecutorAddr::fromPtr(&dso_handle_storage), llvm::JITSymbolFlags::Exported);
-  llvm::orc::SymbolMap symbols;
-  symbols[es.intern("__dso_handle")] = dso_symbol;
-  if (auto err = jd.define(llvm::orc::absoluteSymbols(std::move(symbols)))) {
-    TVM_FFI_THROW(InternalError) << "Failed to define __dso_handle";
+  // Add __dso_handle by compiling a minimal LLVM IR module containing it.
+  // This ensures __dso_handle is allocated in JIT memory (within 2GB of code),
+  // avoiding "relocation out of range" errors with optimized code.
+  //
+  // We create an IR module with a global variable for __dso_handle, then compile
+  // it through the normal IR compilation path. JITLink will allocate it properly.
+  auto Ctx = std::make_unique<llvm::LLVMContext>();
+  auto M = std::make_unique<llvm::Module>("__dso_handle_module", *Ctx);
+  M->setDataLayout(jit_->getDataLayout());
+  M->setTargetTriple(jit_->getTargetTriple().str());
+
+  // Create a global variable: i8 __dso_handle = 0
+  auto* Int8Ty = llvm::Type::getInt8Ty(*Ctx);
+  auto* DsoHandle = new llvm::GlobalVariable(
+      *M, Int8Ty,
+      false,                              // not constant
+      llvm::GlobalValue::WeakAnyLinkage,  // Use weak linkage so multiple dylibs can define it
+      llvm::ConstantInt::get(Int8Ty, 0), "__dso_handle");
+  DsoHandle->setVisibility(llvm::GlobalValue::DefaultVisibility);
+
+  // Add the module to THIS specific JITDylib using the IR layer
+  auto& CompileLayer = jit_->getIRCompileLayer();
+  if (auto Err = CompileLayer.add(jd, llvm::orc::ThreadSafeModule(std::move(M), std::move(Ctx)))) {
+    std::string err_msg;
+    llvm::handleAllErrors(std::move(Err),
+                          [&](const llvm::ErrorInfoBase& eib) { err_msg = eib.message(); });
+    TVM_FFI_THROW(InternalError) << "Failed to add __dso_handle module: " << err_msg;
   }
 
   // Create the wrapper object
