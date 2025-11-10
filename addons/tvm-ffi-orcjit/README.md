@@ -175,7 +175,8 @@ tvm-ffi-orcjit/
 └── python/
     └── tvm_ffi_orcjit/
         ├── __init__.py         # Module exports
-        └── loader.py           # Python ObjectLoader class
+        └── session.py          # Python ExecutionSession class
+        └── dylib.py            # Python DynamicLibrary class
 ```
 
 ## Examples
