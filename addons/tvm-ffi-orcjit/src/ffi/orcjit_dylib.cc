@@ -29,6 +29,7 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <tvm/ffi/c_api.h>
 #include <tvm/ffi/cast.h>
+#include <tvm/ffi/container/array.h>
 #include <tvm/ffi/error.h>
 #include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/orcjit/orcjit_dylib.h>
@@ -64,18 +65,29 @@ void ORCJITDynamicLibrary::AddObjectFile(const String& path) {
   }
 }
 
-void ORCJITDynamicLibrary::LinkAgainst(const ORCJITDynamicLibrary& other) {
-  // Set up link order: this dylib should search in other dylib
-  llvm::orc::JITDylibSearchOrder search_order;
-  search_order.push_back({other.dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols});
+void ORCJITDynamicLibrary::SetLinkOrder(
+    const std::vector<ObjectPtr<ORCJITDynamicLibrary>>& libraries) {
+  // Clear and rebuild the link order
+  link_order_.clear();
 
-  dylib_->setLinkOrder(search_order, false);
+  for (const auto& lib : libraries) {
+    link_order_.push_back({lib->dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols});
+  }
+
+  // Set the link order in the LLVM JITDylib
+  dylib_->setLinkOrder(link_order_, false);
 }
 
 void* ORCJITDynamicLibrary::GetSymbol(const String& name) {
-  // Look up symbol
+  // Build search order: this dylib first, then all linked dylibs
+  llvm::orc::JITDylibSearchOrder search_order;
+  search_order.push_back({dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols});
+  // Append linked libraries
+  search_order.insert(search_order.end(), link_order_.begin(), link_order_.end());
+
+  // Look up symbol using the full search order
   auto symbol_or_err =
-      jit_->getExecutionSession().lookup({dylib_}, jit_->mangleAndIntern(name.c_str()));
+      jit_->getExecutionSession().lookup(search_order, jit_->mangleAndIntern(name.c_str()));
   if (!symbol_or_err) {
     auto err = symbol_or_err.takeError();
     std::string err_msg;
@@ -162,9 +174,17 @@ static void RegisterOrcJITFunctions() {
            })
       .def("orcjit.DynamicLibraryAdd",
            [](ORCJITDynamicLibrary* dylib, String path) { dylib->AddObjectFile(path); })
-      .def("orcjit.DynamicLibraryLinkAgainst",
-           [](ORCJITDynamicLibrary* dylib, ORCJITDynamicLibrary* other) {
-             dylib->LinkAgainst(*other);
+      .def("orcjit.DynamicLibrarySetLinkOrder",
+           [](ORCJITDynamicLibrary* dylib, Array<ObjectRef> libraries) {
+             std::vector<ObjectPtr<ORCJITDynamicLibrary>> lib_ptrs;
+             lib_ptrs.reserve(libraries.size());
+             for (const auto& lib_ref : libraries) {
+               auto* lib = lib_ref.as<ORCJITDynamicLibrary>();
+               auto lib_ptr =
+                   GetObjectPtr<ORCJITDynamicLibrary>(const_cast<ORCJITDynamicLibrary*>(lib));
+               lib_ptrs.push_back(lib_ptr);
+             }
+             dylib->SetLinkOrder(lib_ptrs);
            })
       .def("orcjit.DynamicLibraryGetName",
            [](ORCJITDynamicLibrary* dylib) -> String { return dylib->GetName(); })

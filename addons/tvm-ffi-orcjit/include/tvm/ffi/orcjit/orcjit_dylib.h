@@ -55,12 +55,13 @@ class ORCJITDynamicLibrary : public Object {
   void AddObjectFile(const String& path);
 
   /*!
-   * \brief Link this library against another library
-   * \param other The library to link against
+   * \brief Set the link order for symbol resolution
+   * \param libraries Vector of libraries to search for symbols (in order)
    *
-   * After this call, this library can resolve symbols from 'other'.
+   * When resolving symbols, this library will search in the specified libraries
+   * in the order provided. This replaces any previous link order.
    */
-  void LinkAgainst(const ORCJITDynamicLibrary& other);
+  void SetLinkOrder(const std::vector<ObjectPtr<ORCJITDynamicLibrary>>& libraries);
 
   /*!
    * \brief Look up a symbol in this library
@@ -106,6 +107,9 @@ class ORCJITDynamicLibrary : public Object {
 
   /*! \brief Library name */
   String name_;
+
+  /*! \brief Link order tracking (to support incremental linking) */
+  llvm::orc::JITDylibSearchOrder link_order_;
 };
 
 }  // namespace orcjit

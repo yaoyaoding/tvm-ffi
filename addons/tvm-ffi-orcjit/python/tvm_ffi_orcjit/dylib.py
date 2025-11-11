@@ -59,7 +59,7 @@ class DynamicLibrary:
         self._handle = handle
         self._session = session  # Keep session alive
         self._add_func = get_global_func("orcjit.DynamicLibraryAdd")
-        self._link_func = get_global_func("orcjit.DynamicLibraryLinkAgainst")
+        self._set_link_order_func = get_global_func("orcjit.DynamicLibrarySetLinkOrder")
         self._to_module_func = get_global_func("orcjit.DynamicLibraryToModule")
 
     def add(self, object_file: str | Path) -> None:
@@ -80,29 +80,32 @@ class DynamicLibrary:
             object_file = str(object_file)
         self._add_func(self._handle, object_file)
 
-    def link_against(self, *libraries: DynamicLibrary) -> None:
-        """Link this library against other dynamic libraries.
+    def set_link_order(self, *libraries: DynamicLibrary) -> None:
+        """Set the link order for symbol resolution.
 
-        Sets the search order for symbol resolution. Symbols not found in this library
-        will be searched in the linked libraries in the order specified.
+        When resolving symbols, this library will search in the specified libraries
+        in the order provided. This replaces any previous link order.
 
         Parameters
         ----------
         *libraries : DynamicLibrary
-            One or more dynamic libraries to link against.
+            One or more dynamic libraries to search for symbols (in order).
 
         Examples
         --------
         >>> session = create_session()
         >>> lib_utils = session.create_library()
         >>> lib_utils.add("utils.o")
+        >>> lib_core = session.create_library()
+        >>> lib_core.add("core.o")
         >>> lib_main = session.create_library()
         >>> lib_main.add("main.o")
-        >>> lib_main.link_against(lib_utils)  # main can call utils symbols
+        >>> # main can call symbols from utils and core (utils searched first)
+        >>> lib_main.set_link_order(lib_utils, lib_core)
 
         """
-        handles = [lib._handle for lib in libraries]
-        self._link_func(self._handle, *handles)
+        lib_handles = [lib._handle for lib in libraries]
+        self._set_link_order_func(self._handle, lib_handles)
 
     def get_function(self, name: str) -> Function:
         """Get a function from this dynamic library.
