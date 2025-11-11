@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.20)
 project(
   tvm_ffi_orcjit
   VERSION 0.1.0
@@ -15,46 +15,22 @@ find_package(LLVM REQUIRED CONFIG)
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 
-# Add LLVM definitions and include directories early
-separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-add_definitions(${LLVM_DEFINITIONS_LIST})
-include_directories(${LLVM_INCLUDE_DIRS})
-
-# Find tvm-ffi Look for tvm-ffi in the parent repository first, then system
-set(TVM_FFI_ROOT
-    "${CMAKE_CURRENT_SOURCE_DIR}/../.."
-    CACHE PATH "Path to tvm-ffi"
+# Find tvm-ffi package using the same method as quickstart example
+find_package(
+  Python
+  COMPONENTS Interpreter
+  REQUIRED
 )
 
-if (EXISTS "${TVM_FFI_ROOT}/include/tvm/ffi/c_api.h")
-  message(STATUS "Using tvm-ffi from: ${TVM_FFI_ROOT}")
+# Get the cmake directory for tvm-ffi
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m tvm_ffi.config --cmakedir
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  OUTPUT_VARIABLE tvm_ffi_ROOT
+)
+message(STATUS "tvm_ffi_ROOT: ${tvm_ffi_ROOT}")
 
-  # Determine the library extension based on platform
-  if (APPLE)
-    set(TVM_FFI_LIB_EXT "dylib")
-  elseif (WIN32)
-    set(TVM_FFI_LIB_EXT "dll")
-  else ()
-    set(TVM_FFI_LIB_EXT "so")
-  endif ()
-
-  # Create imported target for tvm_ffi
-  add_library(tvm_ffi SHARED IMPORTED)
-  set_target_properties(
-    tvm_ffi
-    PROPERTIES IMPORTED_LOCATION "${TVM_FFI_ROOT}/build/lib/libtvm_ffi.${TVM_FFI_LIB_EXT}"
-               INTERFACE_INCLUDE_DIRECTORIES
-               "${TVM_FFI_ROOT}/include;${TVM_FFI_ROOT}/3rdparty/dlpack/include"
-  )
-
-  # Set include directories (including src for internal headers)
-  include_directories(${TVM_FFI_ROOT}/include)
-  include_directories(${TVM_FFI_ROOT}/src)
-  include_directories(${TVM_FFI_ROOT}/3rdparty/dlpack/include)
-else ()
-  message(STATUS "Looking for system tvm-ffi")
-  find_package(tvm-ffi REQUIRED CONFIG)
-endif ()
+find_package(tvm_ffi CONFIG REQUIRED)
 
 # LLVM components needed for ORC JIT v2
 llvm_map_components_to_libnames(LLVM_LIBS Core OrcJIT Support native)
@@ -77,16 +53,10 @@ set(SOURCES src/ffi/orcjit_session.cc src/ffi/orcjit_dylib.cc)
 add_library(tvm_ffi_orcjit SHARED ${SOURCES})
 
 target_include_directories(
-  tvm_ffi_orcjit
-  PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>
-  PRIVATE ${LLVM_INCLUDE_DIRS}
+  tvm_ffi_orcjit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${LLVM_INCLUDE_DIRS}
 )
 
-target_link_libraries(
-  tvm_ffi_orcjit
-  PUBLIC tvm_ffi
-  PRIVATE LLVM
-)
+target_link_libraries(tvm_ffi_orcjit PRIVATE tvm_ffi_header tvm_ffi_shared LLVM)
 
 # Compile definitions
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
@@ -98,13 +68,6 @@ install(
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
-)
-
-install(
-  DIRECTORY include/
-  DESTINATION include
-  FILES_MATCHING
-  PATTERN "*.h"
 )
 
 # For Python package building

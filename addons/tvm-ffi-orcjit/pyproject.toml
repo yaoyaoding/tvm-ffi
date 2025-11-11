@@ -16,7 +16,7 @@
 # under the License.
 
 [build-system]
-requires = ["scikit-build-core>=0.3.3"]
+requires = ["scikit-build-core>=0.3.3", "apache-tvm-ffi"]
 build-backend = "scikit_build_core.build"
 
 [project]
