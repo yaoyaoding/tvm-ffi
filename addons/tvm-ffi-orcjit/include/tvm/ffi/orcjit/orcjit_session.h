@@ -40,18 +40,22 @@ namespace orcjit {
 class ORCJITDynamicLibrary;
 
 /*!
- * \brief ExecutionSession wrapper for LLVM ORC JIT v2
+ * \brief ExecutionSession object for LLVM ORC JIT v2
  *
  * This class manages the lifetime of an LLVM ExecutionSession and provides
  * functionality to create and manage multiple JITDylibs (DynamicLibraries).
  */
-class ORCJITExecutionSession : public Object {
+class ORCJITExecutionSessionObj : public Object {
  public:
   /*!
-   * \brief Create a new ExecutionSession
-   * \return The created execution session instance
+   * \brief Default constructor (for make_object)
    */
-  static ObjectPtr<ORCJITExecutionSession> Create();
+  ORCJITExecutionSessionObj();
+
+  /*!
+   * \brief Initialize the LLJIT instance
+   */
+  void Initialize();
 
   /*!
    * \brief Create a new DynamicLibrary (JITDylib) in this session
@@ -73,19 +77,9 @@ class ORCJITExecutionSession : public Object {
   llvm::orc::LLJIT& GetLLJIT();
 
   static constexpr bool _type_mutable = true;
-  TVM_FFI_DECLARE_OBJECT_INFO_FINAL("orcjit.ExecutionSession", ORCJITExecutionSession, Object);
-
-  /*!
-   * \brief Default constructor (for make_object)
-   */
-  ORCJITExecutionSession();
+  TVM_FFI_DECLARE_OBJECT_INFO_FINAL("orcjit.ExecutionSession", ORCJITExecutionSessionObj, Object);
 
  private:
-  /*!
-   * \brief Initialize the LLJIT instance
-   */
-  void Initialize();
-
   /*! \brief The LLVM ORC JIT instance */
   std::unique_ptr<llvm::orc::LLJIT> jit_;
 
@@ -94,6 +88,24 @@ class ORCJITExecutionSession : public Object {
 
   /*! \brief Map of created dynamic libraries for lifetime management */
   std::unordered_map<std::string, ObjectPtr<ORCJITDynamicLibrary>> dylibs_;
+};
+
+/*!
+ * \brief Reference wrapper for ORCJITExecutionSessionObj
+ *
+ * A reference wrapper serves as a reference-counted pointer to the session object.
+ */
+class ORCJITExecutionSession : public ObjectRef {
+ public:
+  /*!
+   * \brief Create a new ExecutionSession
+   * \return The created execution session instance
+   */
+  static ORCJITExecutionSession Create();
+
+  // Required: define object reference methods
+  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NULLABLE(ORCJITExecutionSession, ObjectRef,
+                                             ORCJITExecutionSessionObj);
 };
 
 }  // namespace orcjit

@@ -40,7 +40,7 @@ namespace tvm {
 namespace ffi {
 namespace orcjit {
 
-ORCJITDynamicLibrary::ORCJITDynamicLibrary(ObjectPtr<ORCJITExecutionSession> session,
+ORCJITDynamicLibrary::ORCJITDynamicLibrary(ObjectPtr<ORCJITExecutionSessionObj> session,
                                            llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit,
                                            String name)
     : session_(std::move(session)), dylib_(dylib), jit_(jit), name_(std::move(name)) {
@@ -167,10 +167,12 @@ static void RegisterOrcJITFunctions() {
 
   refl::GlobalDef()
       .def("orcjit.CreateExecutionSession",
-           []() -> ObjectRef { return ObjectRef(ORCJITExecutionSession::Create()); })
+           []() -> ORCJITExecutionSession { return ORCJITExecutionSession::Create(); })
       .def("orcjit.SessionCreateDynamicLibrary",
-           [](ORCJITExecutionSession* session, String name) -> ObjectRef {
-             return ObjectRef(session->CreateDynamicLibrary(name));
+           [](ORCJITExecutionSession session, String name) -> ObjectRef {
+             auto session_obj = GetObjectPtr<ORCJITExecutionSessionObj>(
+                 const_cast<ORCJITExecutionSessionObj*>(session.as<ORCJITExecutionSessionObj>()));
+             return ObjectRef(session_obj->CreateDynamicLibrary(name));
            })
       .def("orcjit.DynamicLibraryAdd",
            [](ORCJITDynamicLibrary* dylib, String path) { dylib->AddObjectFile(path); })

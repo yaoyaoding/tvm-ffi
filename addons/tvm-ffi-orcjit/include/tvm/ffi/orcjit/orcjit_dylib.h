@@ -36,7 +36,7 @@ namespace tvm {
 namespace ffi {
 namespace orcjit {
 
-class ORCJITExecutionSession;
+class ORCJITExecutionSessionObj;
 
 /*!
  * \brief DynamicLibrary wrapper for LLVM ORC JIT v2 JITDylib
@@ -92,12 +92,12 @@ class ORCJITDynamicLibrary : public Object {
    * \param jit The LLJIT instance
    * \param name The library name
    */
-  ORCJITDynamicLibrary(ObjectPtr<ORCJITExecutionSession> session, llvm::orc::JITDylib* dylib,
+  ORCJITDynamicLibrary(ObjectPtr<ORCJITExecutionSessionObj> session, llvm::orc::JITDylib* dylib,
                        llvm::orc::LLJIT* jit, String name);
 
  private:
   /*! \brief Parent execution session (for lifetime management) */
-  ObjectPtr<ORCJITExecutionSession> session_;
+  ObjectPtr<ORCJITExecutionSessionObj> session_;
 
   /*! \brief The LLVM JITDylib */
   llvm::orc::JITDylib* dylib_;

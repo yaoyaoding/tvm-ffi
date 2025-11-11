@@ -52,9 +52,9 @@ struct LLVMInitializer {
 
 static LLVMInitializer llvm_initializer;
 
-ORCJITExecutionSession::ORCJITExecutionSession() : jit_(nullptr), dylib_counter_(0) {}
+ORCJITExecutionSessionObj::ORCJITExecutionSessionObj() : jit_(nullptr), dylib_counter_(0) {}
 
-void ORCJITExecutionSession::Initialize() {
+void ORCJITExecutionSessionObj::Initialize() {
   // Create LLJIT instance
   auto jit_or_err = llvm::orc::LLJITBuilder().create();
   if (!jit_or_err) {
@@ -67,13 +67,14 @@ void ORCJITExecutionSession::Initialize() {
   jit_ = std::move(*jit_or_err);
 }
 
-ObjectPtr<ORCJITExecutionSession> ORCJITExecutionSession::Create() {
-  auto session = make_object<ORCJITExecutionSession>();
-  session->Initialize();
-  return session;
+ORCJITExecutionSession ORCJITExecutionSession::Create() {
+  auto obj = make_object<ORCJITExecutionSessionObj>();
+  obj->Initialize();
+  return ORCJITExecutionSession(obj);
 }
 
-ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSession::CreateDynamicLibrary(const String& name) {
+ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSessionObj::CreateDynamicLibrary(
+    const String& name) {
   TVM_FFI_CHECK(jit_ != nullptr, InternalError) << "ExecutionSession not initialized";
 
   // Generate name if not provided
@@ -129,7 +130,7 @@ ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSession::CreateDynamicLibrary(con
   }
 
   // Create the wrapper object
-  auto dylib = make_object<ORCJITDynamicLibrary>(GetObjectPtr<ORCJITExecutionSession>(this), &jd,
+  auto dylib = make_object<ORCJITDynamicLibrary>(GetObjectPtr<ORCJITExecutionSessionObj>(this), &jd,
                                                  jit_.get(), lib_name);
 
   // Store for lifetime management
@@ -138,12 +139,12 @@ ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSession::CreateDynamicLibrary(con
   return dylib;
 }
 
-llvm::orc::ExecutionSession& ORCJITExecutionSession::GetLLVMExecutionSession() {
+llvm::orc::ExecutionSession& ORCJITExecutionSessionObj::GetLLVMExecutionSession() {
   TVM_FFI_CHECK(jit_ != nullptr, InternalError) << "ExecutionSession not initialized";
   return jit_->getExecutionSession();
 }
 
-llvm::orc::LLJIT& ORCJITExecutionSession::GetLLJIT() {
+llvm::orc::LLJIT& ORCJITExecutionSessionObj::GetLLJIT() {
   TVM_FFI_CHECK(jit_ != nullptr, InternalError) << "ExecutionSession not initialized";
   return *jit_;
 }
