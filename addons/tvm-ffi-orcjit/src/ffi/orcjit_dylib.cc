@@ -22,6 +22,8 @@
  * \brief LLVM ORC JIT DynamicLibrary implementation
  */
 
+#include "orcjit_dylib.h"
+
 #include <llvm/ExecutionEngine/Orc/Core.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/Object/ObjectFile.h>
@@ -32,9 +34,9 @@
 #include <tvm/ffi/container/array.h>
 #include <tvm/ffi/error.h>
 #include <tvm/ffi/extra/module.h>
-#include <tvm/ffi/orcjit/orcjit_dylib.h>
-#include <tvm/ffi/orcjit/orcjit_session.h>
 #include <tvm/ffi/reflection/registry.h>
+
+#include "orcjit_session.h"
 
 namespace tvm {
 namespace ffi {

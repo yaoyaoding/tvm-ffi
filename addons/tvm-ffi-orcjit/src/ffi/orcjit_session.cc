@@ -22,6 +22,8 @@
  * \brief LLVM ORC JIT ExecutionSession implementation
  */
 
+#include "orcjit_session.h"
+
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
 #include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
 #include <llvm/IR/GlobalVariable.h>
@@ -31,11 +33,11 @@
 #include <llvm/Support/TargetSelect.h>
 #include <tvm/ffi/cast.h>
 #include <tvm/ffi/error.h>
-#include <tvm/ffi/orcjit/orcjit_dylib.h>
-#include <tvm/ffi/orcjit/orcjit_session.h>
 #include <tvm/ffi/reflection/registry.h>
 
 #include <sstream>
+
+#include "orcjit_dylib.h"
 
 namespace tvm {
 namespace ffi {
