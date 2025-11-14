@@ -31,6 +31,13 @@ To install via pip, run:
 
    pip install apache-tvm-ffi
 
+We also recommend installing the optional package below for improved
+torch tensor conversion performance.
+
+.. code-block:: bash
+
+   pip install torch-c-dlpack-ext
+
 
 Table of Contents
 -----------------
@@ -40,15 +47,17 @@ Table of Contents
    :caption: Get Started
 
    get_started/quickstart.rst
+   get_started/stable_c_abi.rst
 
 .. toctree::
    :maxdepth: 1
    :caption: Guides
 
    guides/python_packaging.md
+   guides/cpp_packaging.md
    guides/cpp_guide.md
    guides/python_guide.md
-   guides/stable_c_abi.md
+   guides/rust_guide.md
    guides/compiler_integration.md
    guides/build_from_source.md
    guides/kernel_library_guide.rst
@@ -67,3 +76,4 @@ Table of Contents
 
    reference/python/index.rst
    reference/cpp/index.rst
+   reference/rust/index.rst

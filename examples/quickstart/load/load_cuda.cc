@@ -16,20 +16,36 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-#include <cuda_runtime.h>
+// [main.begin]
+// File: load/load_cuda.cc
 #include <tvm/ffi/container/tensor.h>
-#include <tvm/ffi/error.h>
 #include <tvm/ffi/extra/module.h>
+
+namespace {
+namespace ffi = tvm::ffi;
+/*!
+ * \brief Main logics of library loading and function calling with CUDA tensors.
+ * \param x The input tensor on CUDA device.
+ * \param y The output tensor on CUDA device.
+ */
+void Run(tvm::ffi::TensorView x, tvm::ffi::TensorView y) {
+  // Load shared library `build/add_one_cuda.so`
+  ffi::Module mod = ffi::Module::LoadFromFile("build/add_one_cuda.so");
+  // Look up `add_one_cuda` function
+  ffi::Function add_one_cuda = mod->GetFunction("add_one_cuda").value();
+  // Call the function with CUDA tensors
+  add_one_cuda(x, y);
+}
+}  // namespace
+// [main.end]
+/************* Auxiliary Logics *************/
+// [aux.begin]
+#include <cuda_runtime.h>
+#include <tvm/ffi/error.h>
 
 #include <iostream>
 #include <vector>
 
-namespace ffi = tvm::ffi;
-
-// This example mirrors run_example.cc but keeps all data on the GPU by allocating
-// CUDA tensors, invoking the add_one_cuda FFI function, and copying the result back
-// to host memory so users can inspect the output.
 struct CUDANDAlloc {
   void AllocData(DLTensor* tensor) {
     size_t data_size = ffi::GetDataSize(*tensor);
@@ -48,14 +64,18 @@ struct CUDANDAlloc {
   }
 };
 
+/*!
+ * \brief Allocate a CUDA tensor with the given shape and data type.
+ * \param shape The shape of the tensor.
+ * \param dtype The data type of the tensor.
+ * \param device The CUDA device.
+ * \return The allocated CUDA tensor.
+ */
 inline ffi::Tensor Empty(ffi::Shape shape, DLDataType dtype, DLDevice device) {
   return ffi::Tensor::FromNDAlloc(CUDANDAlloc(), shape, dtype, device);
 }
 
 int main() {
-  // Load the CUDA implementation that run_example.cu exports during the CMake build.
-  ffi::Module mod = ffi::Module::LoadFromFile("build/add_one_cuda.so");
-
   DLDataType f32_dtype{kDLFloat, 32, 1};
   DLDevice cuda_device{kDLCUDA, 0};
 
@@ -66,7 +86,7 @@ int main() {
 
   std::vector<float> host_x(ARRAY_SIZE);
   for (int i = 0; i < ARRAY_SIZE; ++i) {
-    host_x[i] = static_cast<float>(i);
+    host_x[i] = static_cast<float>(i + 1);
   }
 
   size_t nbytes = host_x.size() * sizeof(float);
@@ -74,21 +94,19 @@ int main() {
   TVM_FFI_ICHECK_EQ(err, cudaSuccess)
       << "cudaMemcpy host to device failed: " << cudaGetErrorString(err);
 
-  // Call into the FFI function; tensors remain on device because they carry a
-  // kDLCUDA device tag.
-  ffi::Function add_one_cuda = mod->GetFunction("add_one_cuda").value();
-  add_one_cuda(x, y);
+  Run(x, y);
 
   std::vector<float> host_y(host_x.size());
   err = cudaMemcpy(host_y.data(), y.data_ptr(), nbytes, cudaMemcpyDeviceToHost);
   TVM_FFI_ICHECK_EQ(err, cudaSuccess)
       << "cudaMemcpy device to host failed: " << cudaGetErrorString(err);
 
-  std::cout << "y after add_one_cuda(x, y)" << std::endl;
+  std::cout << "[ ";
   for (float value : host_y) {
     std::cout << value << " ";
   }
-  std::cout << std::endl;
+  std::cout << "]" << std::endl;
 
   return 0;
 }
+// [aux.end]

@@ -88,10 +88,12 @@ _fecho = tvm_ffi.get_global_func("testing.echo")
 
 def _check_dtype(dtype: Any, code: int, bits: int, lanes: int) -> None:
     echo_dtype = _fecho(dtype)
+    assert isinstance(echo_dtype, tvm_ffi.dtype)
     assert echo_dtype.type_code == code
     assert echo_dtype.bits == bits
     assert echo_dtype.lanes == lanes
     converted_dtype = tvm_ffi.convert(dtype)
+    assert isinstance(converted_dtype, tvm_ffi.dtype)
     assert converted_dtype.type_code == code
     assert converted_dtype.bits == bits
     assert converted_dtype.lanes == lanes
@@ -160,3 +162,10 @@ def test_ml_dtypes_dtype_conversion() -> None:
     _check_dtype(np.dtype(ml_dtypes.float6_e2m3fn), 15, 6, 1)
     _check_dtype(np.dtype(ml_dtypes.float6_e3m2fn), 16, 6, 1)
     _check_dtype(np.dtype(ml_dtypes.float4_e2m1fn), 17, 4, 1)
+
+
+def test_dtype_from_dlpack_data_type() -> None:
+    dtype = tvm_ffi.dtype.from_dlpack_data_type((0, 8, 1))
+    assert dtype.type_code == 0
+    assert dtype.bits == 8
+    assert dtype.lanes == 1

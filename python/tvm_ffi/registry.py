@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Callable, Literal, overload
+from typing import Any, Callable, Literal, Sequence, TypeVar, overload
 
 from . import core
 from .core import TypeInfo
@@ -29,18 +29,22 @@ from .core import TypeInfo
 _SKIP_UNKNOWN_OBJECTS = False
 
 
-def register_object(type_key: str | type | None = None) -> Callable[[type], type] | type:
+_T = TypeVar("_T", bound=type)
+
+
+def register_object(type_key: str | None = None) -> Callable[[_T], _T]:
     """Register object type.
 
     Parameters
     ----------
     type_key
-        The type key of the node
+        The type key of the node. It requires ``type_key`` to be registered already
+        on the C++ side. If not specified, the class name will be used.
 
     Examples
     --------
-    The following code registers MyObject
-    using type key "test.MyObject"
+    The following code registers MyObject using type key "test.MyObject", if the
+    type key is already registered on the C++ side.
 
     .. code-block:: python
 
@@ -50,7 +54,7 @@ def register_object(type_key: str | type | None = None) -> Callable[[type], type
 
     """
 
-    def _register(cls: type, object_name: str) -> type:
+    def _register(cls: _T, object_name: str) -> _T:
         """Register the object type with the FFI core."""
         type_index = core._object_type_key_to_index(object_name)
         if type_index is None:
@@ -64,12 +68,12 @@ def register_object(type_key: str | type | None = None) -> Callable[[type], type
 
     if isinstance(type_key, str):
 
-        def _decorator_with_name(cls: type) -> type:
+        def _decorator_with_name(cls: _T) -> _T:
             return _register(cls, type_key)
 
         return _decorator_with_name
 
-    def _decorator_default(cls: type) -> type:
+    def _decorator_default(cls: _T) -> _T:
         return _register(cls, cls.__name__)
 
     if type_key is None:
@@ -165,7 +169,20 @@ def get_global_func(name: str, allow_missing: bool = False) -> core.Function | N
     Returns
     -------
     func
-        The function to be returned, None if function is missing.
+        The function to be returned, ``None`` if function is missing.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import tvm_ffi
+
+        @tvm_ffi.register_global_func("demo.echo")
+        def echo(x):
+            return x
+
+        f = tvm_ffi.get_global_func("demo.echo")
+        assert f(123) == 123
 
     See Also
     --------
@@ -195,27 +212,63 @@ def remove_global_func(name: str) -> None:
     Parameters
     ----------
     name
-        The name of the global function
+        The name of the global function.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import tvm_ffi
+
+        @tvm_ffi.register_global_func("my.temp")
+        def temp():
+            return 42
+
+        assert tvm_ffi.get_global_func("my.temp", allow_missing=True) is not None
+        tvm_ffi.remove_global_func("my.temp")
+        assert tvm_ffi.get_global_func("my.temp", allow_missing=True) is None
+
+    See Also
+    --------
+    :py:func:`tvm_ffi.register_global_func`
+    :py:func:`tvm_ffi.get_global_func`
 
     """
     get_global_func("ffi.FunctionRemoveGlobal")(name)
 
 
 def get_global_func_metadata(name: str) -> dict[str, Any]:
-    """Get the type schema string of a global function by name.
+    """Get metadata (including type schema) for a global function.
 
     Parameters
     ----------
     name
-        The name of the global function
+        The name of the global function.
 
     Returns
     -------
     metadata
-        The metadata of the function
+        A dictionary containing function metadata. The ``type_schema`` field
+        encodes the callable signature.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        import tvm_ffi
+
+        meta = tvm_ffi.get_global_func_metadata("testing.add_one")
+        print(meta)
+
+    See Also
+    --------
+    :py:func:`tvm_ffi.get_global_func`
+        Retrieve a callable for an existing global function.
+    :py:func:`tvm_ffi.register_global_func`
+        Register a Python callable as a global FFI function.
 
     """
-    return json.loads(get_global_func("ffi.GetGlobalFuncMetadata")(name))
+    return json.loads(get_global_func("ffi.GetGlobalFuncMetadata")(name) or "{}")
 
 
 def init_ffi_api(namespace: str, target_module_name: str | None = None) -> None:
@@ -273,18 +326,42 @@ def _add_class_attrs(type_cls: type, type_info: TypeInfo) -> type:
         name = field.name
         if not hasattr(type_cls, name):  # skip already defined attributes
             setattr(type_cls, name, field.as_property(type_cls))
+    has_c_init = False
     for method in type_info.methods:
         name = method.name
         if name == "__ffi_init__":
             name = "__c_ffi_init__"
+            has_c_init = True
         if not hasattr(type_cls, name):
             setattr(type_cls, name, method.as_callable(type_cls))
+    if "__init__" not in type_cls.__dict__:
+        if has_c_init:
+            setattr(type_cls, "__init__", getattr(type_cls, "__ffi_init__"))
+        elif not issubclass(type_cls, core.PyNativeObject):
+            setattr(type_cls, "__init__", __init__invalid)
     return type_cls
+
+
+def __init__invalid(self: Any, *args: Any, **kwargs: Any) -> None:
+    raise RuntimeError("The __init__ method of this class is not implemented.")
+
+
+def get_registered_type_keys() -> Sequence[str]:
+    """Get the list of valid type keys registered to TVM-FFI.
+
+    Returns
+    -------
+    type_keys
+        List of valid type keys.
+
+    """
+    return get_global_func("ffi.GetRegisteredTypeKeys")()
 
 
 __all__ = [
     "get_global_func",
     "get_global_func_metadata",
+    "get_registered_type_keys",
     "init_ffi_api",
     "list_global_func_names",
     "register_global_func",

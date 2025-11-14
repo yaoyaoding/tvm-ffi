@@ -14,6 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+from __future__ import annotations
 
 import ctypes
 import gc
@@ -70,6 +71,10 @@ def test_echo() -> None:
     c_void_p_result = fecho(ctypes.c_void_p(0x12345678))
     assert isinstance(c_void_p_result, ctypes.c_void_p)
     assert c_void_p_result.value == 0x12345678
+
+    # test c_void_p for nullptr
+    c_void_p_nullptr_result = fecho(ctypes.c_void_p(0))
+    c_void_p_nullptr_result is None
 
     # test function: aka object
     fadd = tvm_ffi.convert(lambda a, b: a + b)
@@ -312,3 +317,69 @@ def test_function_with_opaque_ptr_protocol() -> None:
     y = fecho(x)
     assert isinstance(y, ctypes.c_void_p)
     assert y.value == 10
+
+
+def test_function_with_dlpack_data_type_protocol() -> None:
+    class DLPackDataTypeProtocol:
+        def __init__(self, dlpack_data_type: tuple[int, int, int]) -> None:
+            self.dlpack_data_type = dlpack_data_type
+
+        def __dlpack_data_type__(self) -> tuple[int, int, int]:
+            return self.dlpack_data_type
+
+    dtype = tvm_ffi.dtype("float32")
+    fecho = tvm_ffi.get_global_func("testing.echo")
+    x = DLPackDataTypeProtocol((dtype.type_code, dtype.bits, dtype.lanes))
+    y = fecho(x)
+    assert y == dtype
+    converted_y = tvm_ffi.convert(x)
+    assert converted_y == dtype
+
+
+def test_function_with_dlpack_device_protocol() -> None:
+    device = tvm_ffi.device("cuda:1")
+
+    class DLPackDeviceProtocol:
+        def __init__(self, device: tvm_ffi.Device) -> None:
+            self.device = device
+
+        def __dlpack_device__(self) -> tuple[int, int]:
+            return (self.device.dlpack_device_type(), self.device.index)
+
+    fecho = tvm_ffi.get_global_func("testing.echo")
+    x = DLPackDeviceProtocol(device)
+    y = fecho(x)
+    assert y == device
+
+
+def test_integral_float_variants_passing() -> None:
+    fecho = tvm_ffi.get_global_func("testing.echo")
+    y = fecho(np.int32(1))
+    assert isinstance(y, int)
+    assert y == 1
+
+    y = fecho(np.float64(2.0))
+    assert isinstance(y, float)
+    assert y == 2.0
+
+    class IntProtocol:
+        def __init__(self, value: int) -> None:
+            self.value = value
+
+        def __tvm_ffi_int__(self) -> int:
+            return self.value
+
+    y = fecho(IntProtocol(10))
+    assert isinstance(y, int)
+    assert y == 10
+
+    class FloatProtocol:
+        def __init__(self, value: float) -> None:
+            self.value = value
+
+        def __tvm_ffi_float__(self) -> float:
+            return self.value
+
+    y = fecho(FloatProtocol(10))
+    assert isinstance(y, float)
+    assert y == 10

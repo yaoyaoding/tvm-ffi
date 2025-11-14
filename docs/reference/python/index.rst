@@ -42,12 +42,12 @@ Tensor
   :toctree: generated/
 
   Tensor
-  Shape
-  Device
   from_dlpack
+  Shape
+  dtype
+  Device
   DLDeviceType
   device
-  dtype
 
 
 Function
@@ -99,9 +99,10 @@ Stream Context
   StreamContext
   use_torch_stream
   use_raw_stream
+  get_raw_stream
 
 
-Inline Loading
+C++ Extension
 --------------
 
 C++ integration helpers for building and loading inline modules.
@@ -111,15 +112,19 @@ C++ integration helpers for building and loading inline modules.
 
   cpp.load_inline
   cpp.build_inline
-
+  cpp.load
+  cpp.build
 
 Misc
 ----
 .. autosummary::
   :toctree: generated/
 
-  serialization
-  access_path
+  serialization.from_json_graph_str
+  serialization.to_json_graph_str
+  access_path.AccessKind
+  access_path.AccessPath
+  access_path.AccessStep
   convert
   ObjectConvertible
 

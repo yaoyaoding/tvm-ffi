@@ -244,6 +244,10 @@ cdef extern from "tvm/ffi/c_api.h":
         const TVMFFIMethodInfo* methods
         const TVMFFITypeMetadata* metadata
 
+    ctypedef struct TVMFFITypeAttrColumn:
+        const TVMFFIAny* data
+        size_t size
+
     int TVMFFIObjectDecRef(TVMFFIObjectHandle obj) nogil
     int TVMFFIObjectIncRef(TVMFFIObjectHandle obj) nogil
     int TVMFFIObjectCreateOpaque(void* handle, int32_t type_index,
@@ -285,6 +289,7 @@ cdef extern from "tvm/ffi/c_api.h":
     TVMFFIShapeCell* TVMFFIShapeGetCellPtr(TVMFFIObjectHandle obj) nogil
     DLTensor* TVMFFITensorGetDLTensorPtr(TVMFFIObjectHandle obj) nogil
     DLDevice TVMFFIDLDeviceFromIntPair(int32_t device_type, int32_t device_id) nogil
+    const TVMFFITypeAttrColumn* TVMFFIGetTypeAttrColumn(const TVMFFIByteArray* attr_name) nogil
 
 cdef extern from "tvm/ffi/extra/c_env_api.h":
     ctypedef void* TVMFFIStreamHandle
@@ -439,7 +444,8 @@ cdef inline object ctypes_handle(void* chandle):
 cdef inline void* c_handle(object handle):
     """Cast C types handle to c handle."""
     cdef unsigned long long v_ptr
-    v_ptr = handle.value
+    cdef object value = handle.value
+    v_ptr = 0 if value is None else value
     return <void*>(v_ptr)
 
 

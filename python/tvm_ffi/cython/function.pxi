@@ -17,7 +17,8 @@
 import ctypes
 import threading
 import os
-from numbers import Real, Integral
+from numbers import Integral, Real
+from typing import Any, Callable
 
 
 if os.environ.get("TVM_FFI_BUILD_DOCS", "0") == "0":
@@ -32,9 +33,15 @@ if os.environ.get("TVM_FFI_BUILD_DOCS", "0") == "0":
         import numpy
     except ImportError:
         numpy = None
+
+    try:
+        from cuda.bindings import driver as cuda_driver
+    except ImportError:
+        cuda_driver = None
 else:
     torch = None
     numpy = None
+    cuda_driver = None
 
 
 cdef int _RELEASE_GIL_BY_DEFAULT = int(
@@ -149,20 +156,20 @@ cdef int TVMFFIPyArgSetterDLPackExchangeAPI_(
     cdef DLManagedTensorVersioned* temp_managed_tensor
     cdef TVMFFIObjectHandle temp_chandle
     cdef void* current_stream = NULL
-    cdef const DLPackExchangeAPI* api = this.c_dlpack_exchange_api
+    cdef const DLPackExchangeAPI* exchange_api = this.c_dlpack_exchange_api
 
     # Set the exchange API in context
-    ctx.c_dlpack_exchange_api = api
+    ctx.c_dlpack_exchange_api = exchange_api
 
     # Convert PyObject to DLPack using the struct's function pointer
-    if api.managed_tensor_from_py_object_no_sync(arg, &temp_managed_tensor) != 0:
+    if exchange_api.managed_tensor_from_py_object_no_sync(arg, &temp_managed_tensor) != 0:
         return -1
 
     # Query current stream from producer if device is not CPU
     if temp_managed_tensor.dl_tensor.device.device_type != kDLCPU:
-        if ctx.device_type == -1 and api.current_work_stream != NULL:
+        if ctx.device_type == -1 and exchange_api.current_work_stream != NULL:
             # First time seeing a device, query the stream
-            if api.current_work_stream(
+            if exchange_api.current_work_stream(
                 temp_managed_tensor.dl_tensor.device.device_type,
                 temp_managed_tensor.dl_tensor.device.device_id,
                 &current_stream
@@ -173,6 +180,9 @@ cdef int TVMFFIPyArgSetterDLPackExchangeAPI_(
 
     # Convert to TVM Tensor
     if TVMFFITensorFromDLPackVersioned(temp_managed_tensor, 0, 0, &temp_chandle) != 0:
+        # recycle the managed tensor to avoid leak
+        if temp_managed_tensor.deleter != NULL:
+            temp_managed_tensor.deleter(temp_managed_tensor)
         raise BufferError("Failed to convert DLManagedTensorVersioned to ffi.Tensor")
 
     out.type_index = kTVMFFITensor
@@ -181,7 +191,7 @@ cdef int TVMFFIPyArgSetterDLPackExchangeAPI_(
     return 0
 
 
-cdef int TorchDLPackToPyObjectFallback_(
+cdef int TorchManagedTensorToPyObjectNoSyncFallback_(
     DLManagedTensorVersioned* dltensor, void** py_obj_out
 ) except -1:
     # a bit convoluted but ok as a fallback
@@ -204,7 +214,9 @@ cdef inline const DLPackExchangeAPI* GetTorchFallbackExchangeAPI() noexcept:
     _torch_fallback_exchange_api.header.prev_api = NULL
     _torch_fallback_exchange_api.managed_tensor_allocator = NULL
     _torch_fallback_exchange_api.managed_tensor_from_py_object_no_sync = NULL
-    _torch_fallback_exchange_api.managed_tensor_to_py_object_no_sync = TorchDLPackToPyObjectFallback_
+    _torch_fallback_exchange_api.managed_tensor_to_py_object_no_sync = (
+        TorchManagedTensorToPyObjectNoSyncFallback_
+    )
     _torch_fallback_exchange_api.dltensor_from_py_object_no_sync = NULL
     _torch_fallback_exchange_api.current_work_stream = NULL
 
@@ -221,6 +233,7 @@ cdef int TVMFFIPyArgSetterTorchFallback_(
     """Current setter for torch.Tensor, go through python and not as fast as c exporter"""
     # TODO(tqchen): remove this once torch always support fast DLPack importer
     cdef object arg = <object>py_arg
+    cdef long long temp_ptr
     is_cuda = arg.is_cuda
     arg = from_dlpack(torch.utils.dlpack.to_dlpack(arg))
     out.type_index = kTVMFFITensor
@@ -228,7 +241,7 @@ cdef int TVMFFIPyArgSetterTorchFallback_(
     temp_dltensor = TVMFFITensorGetDLTensorPtr((<Tensor>arg).chandle)
     ctx.c_dlpack_exchange_api = GetTorchFallbackExchangeAPI()
     # record the stream and device for torch context
-    if is_cuda and ctx.device_type != -1:
+    if is_cuda and ctx.device_type == -1:
         ctx.device_type = temp_dltensor.device.device_type
         ctx.device_id = temp_dltensor.device.device_id
         # This is an API that dynamo and other uses to get the raw stream from torch
@@ -266,7 +279,33 @@ cdef int TVMFFIPyArgSetterDLPack_(
     return 0
 
 
-cdef int TVMFFIPyArgSetterFFIObjectCompatible_(
+cdef int TVMFFIPyArgSetterIntegral_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for Integral"""
+    cdef object arg = <object>py_arg
+    out.type_index = kTVMFFIInt
+    # keep it in cython so it will also check for fallback cases
+    # where the arg is not exactly the int class
+    out.v_int64 = <long long>arg
+    return 0
+
+
+cdef int TVMFFIPyArgSetterReal_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for Real"""
+    cdef object arg = <object>py_arg
+    out.type_index = kTVMFFIFloat
+    # keep it in cython so it will also check for fallback cases
+    # where the arg is not exactly the float class
+    out.v_float64 = <double>arg
+    return 0
+
+
+cdef int TVMFFIPyArgSetterFFIObjectProtocol_(
     TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
     PyObject* py_arg, TVMFFIAny* out
 ) except -1:
@@ -286,7 +325,7 @@ cdef int TVMFFIPyArgSetterFFIObjectCompatible_(
     return 0
 
 
-cdef int TVMFFIPyArgSetterCUDAStream_(
+cdef int TVMFFIPyArgSetterCUDAStreamProtocol_(
     TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
     PyObject* py_arg, TVMFFIAny* out
 ) except -1:
@@ -300,6 +339,19 @@ cdef int TVMFFIPyArgSetterCUDAStream_(
     return 0
 
 
+cdef int TVMFFIPyArgSetterCUDADriverStreamFallback_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for cuda.bindings.driver.CUstream as a fallback without __cuda_stream__ protocol"""
+    cdef object arg = <object>py_arg
+    # call driver stream
+    cdef long long long_ptr = int(arg)
+    out.type_index = kTVMFFIOpaquePtr
+    out.v_ptr = <void*>long_ptr
+    return 0
+
+
 cdef int TVMFFIPyArgSetterDType_(
     TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
     PyObject* py_arg, TVMFFIAny* out
@@ -307,7 +359,7 @@ cdef int TVMFFIPyArgSetterDType_(
     """Setter for dtype"""
     cdef object arg = <object>py_arg
     # dtype is a subclass of str, so this check occur before str
-    arg = arg.__tvm_ffi_dtype__
+    arg = arg._tvm_ffi_dtype
     out.type_index = kTVMFFIDataType
     out.v_dtype = (<DataType>arg).cdtype
     return 0
@@ -323,6 +375,19 @@ cdef int TVMFFIPyArgSetterDevice_(
     out.v_device = (<Device>arg).cdevice
     return 0
 
+cdef int TVMFFIPyArgSetterDLPackDeviceProtocol_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for dlpack device protocol"""
+    cdef object arg = <object>py_arg
+    cdef tuple dlpack_device = arg.__dlpack_device__()
+    out.type_index = kTVMFFIDevice
+    out.v_device = TVMFFIDLDeviceFromIntPair(
+        <int32_t>dlpack_device[0],
+        <int32_t>dlpack_device[1]
+    )
+    return 0
 
 cdef int TVMFFIPyArgSetterStr_(
     TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
@@ -554,10 +619,10 @@ cdef int TVMFFIPyArgSetterDTypeFromTorch_(
 ) except -1:
     """Setter for torch dtype"""
     cdef py_obj = <object>py_arg
-    if py_obj not in TORCH_DTYPE_TO_DTYPE:
+    if py_obj not in TORCH_DTYPE_TO_DL_DATA_TYPE:
         raise ValueError("Unsupported torch dtype: ", py_obj)
     out.type_index = kTVMFFIDataType
-    out.v_dtype = TORCH_DTYPE_TO_DTYPE[py_obj]
+    out.v_dtype = TORCH_DTYPE_TO_DL_DATA_TYPE[py_obj]
     return 0
 
 cdef int TVMFFIPyArgSetterDTypeFromNumpy_(
@@ -566,10 +631,46 @@ cdef int TVMFFIPyArgSetterDTypeFromNumpy_(
 ) except -1:
     """Setter for torch dtype"""
     cdef py_obj = <object>py_arg
-    if py_obj not in NUMPY_DTYPE_TO_DTYPE:
+    if py_obj not in NUMPY_DTYPE_TO_DL_DATA_TYPE:
         raise ValueError("Unsupported numpy or ml_dtypes dtype: ", py_obj)
     out.type_index = kTVMFFIDataType
-    out.v_dtype = NUMPY_DTYPE_TO_DTYPE[py_obj]
+    out.v_dtype = NUMPY_DTYPE_TO_DL_DATA_TYPE[py_obj]
+    return 0
+
+
+cdef int TVMFFIPyArgSetterDLPackDataTypeProtocol_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for dtype protocol"""
+    cdef object arg = <object>py_arg
+    cdef tuple dltype_data_type = arg.__dlpack_data_type__()
+    out.type_index = kTVMFFIDataType
+    out.v_dtype.code = <long long>dltype_data_type[0]
+    out.v_dtype.bits = <long long>dltype_data_type[1]
+    out.v_dtype.lanes = <long long>dltype_data_type[2]
+    return 0
+
+
+cdef int TVMFFIPyArgSetterIntProtocol_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for class with __tvm_ffi_int__() method"""
+    cdef object arg = <object>py_arg
+    out.type_index = kTVMFFIInt
+    out.v_int64 = <long long>(arg.__tvm_ffi_int__())
+    return 0
+
+
+cdef int TVMFFIPyArgSetterFloatProtocol_(
+    TVMFFIPyArgSetter* handle, TVMFFIPyCallContext* ctx,
+    PyObject* py_arg, TVMFFIAny* out
+) except -1:
+    """Setter for class with __tvm_ffi_float__() method"""
+    cdef object arg = <object>py_arg
+    out.type_index = kTVMFFIFloat
+    out.v_float64 = <double>(arg.__tvm_ffi_float__())
     return 0
 
 
@@ -620,9 +721,9 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
         # can directly map to tvm ffi object
         # usually used for solutions that takes subclass of ffi.Object
         # as a member variable
-        out.func = TVMFFIPyArgSetterFFIObjectCompatible_
+        out.func = TVMFFIPyArgSetterFFIObjectProtocol_
         return 0
-    if os.environ.get("TVM_FFI_SKIP_c_dlpack_from_pyobject", "0") != "1":
+    if os.environ.get("TVM_FFI_SKIP_C_DLPACK_EXCHANGE_API", "0") != "1":
         # Check for DLPackExchangeAPI struct (new approach)
         # This is checked on the CLASS, not the instance
         if hasattr(arg_class, "__c_dlpack_exchange_api__"):
@@ -632,7 +733,11 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
             return 0
     if hasattr(arg_class, "__cuda_stream__"):
         # cuda stream protocol
-        out.func = TVMFFIPyArgSetterCUDAStream_
+        out.func = TVMFFIPyArgSetterCUDAStreamProtocol_
+        return 0
+    if cuda_driver is not None and isinstance(arg, cuda_driver.CUstream):
+        # TODO(tqchen): remove this once cuda-python supports __cuda_stream__ protocol
+        out.func = TVMFFIPyArgSetterCUDADriverStreamFallback_
         return 0
     if torch is not None and isinstance(arg, torch.Tensor):
         out.func = TVMFFIPyArgSetterTorchFallback_
@@ -646,10 +751,15 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
         out.func = TVMFFIPyArgSetterBool_
         return 0
     if isinstance(arg, Integral):
-        out.func = TVMFFIPyArgSetterInt_
+        # must occur before Real check
+        # cannot simply use TVMFFIPyArgSetterInt
+        # because Integral may not be exactly the int class
+        out.func = TVMFFIPyArgSetterIntegral_
         return 0
     if isinstance(arg, Real):
-        out.func = TVMFFIPyArgSetterFloat_
+        # cannot simply use TVMFFIPyArgSetterFloat
+        # because Real may not be exactly the float class
+        out.func = TVMFFIPyArgSetterReal_
         return 0
     # dtype is a subclass of str, so this check must occur before str
     if isinstance(arg, _CLASS_DTYPE):
@@ -699,6 +809,21 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
     if numpy is not None and isinstance(arg, numpy.dtype):
         out.func = TVMFFIPyArgSetterDTypeFromNumpy_
         return 0
+    if hasattr(arg_class, "__dlpack_data_type__"):
+        # prefer dlpack as it covers all DLDataType struct
+        out.func = TVMFFIPyArgSetterDLPackDataTypeProtocol_
+        return 0
+    if hasattr(arg_class, "__dlpack_device__") and not hasattr(arg_class, "__dlpack__"):
+        # if a class have __dlpack_device__ but not __dlpack__
+        # then it is a DLPack device protocol
+        out.func = TVMFFIPyArgSetterDLPackDeviceProtocol_
+        return 0
+    if hasattr(arg_class, "__tvm_ffi_int__"):
+        out.func = TVMFFIPyArgSetterIntProtocol_
+        return 0
+    if hasattr(arg_class, "__tvm_ffi_float__"):
+        out.func = TVMFFIPyArgSetterFloatProtocol_
+        return 0
     if isinstance(arg, Exception):
         out.func = TVMFFIPyArgSetterException_
         return 0
@@ -714,27 +839,48 @@ cdef int TVMFFIPyArgSetterFactory_(PyObject* value, TVMFFIPyArgSetter* out) exce
 # Implementation of function calling
 # ---------------------------------------------------------------------------------------------
 cdef class Function(Object):
-    """Python class that wraps a function with tvm-ffi ABI.
+    """Callable wrapper around a TVM FFI function.
+
+    Instances are obtained by converting Python callables with
+    :func:`tvm_ffi.convert`, or by looking up globally-registered FFI
+    functions using :func:`tvm_ffi.get_global_func`.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        @tvm_ffi.register_global_func("my.add")
+        def add(a, b):
+            return a + b
+
+        f = tvm_ffi.get_global_func("my.add")
+        assert isinstance(f, tvm_ffi.Function)
+        assert f(1, 2) == 3
 
     See Also
     --------
-    tvm_ffi.register_global_func: How to register global function.
-    tvm_ffi.get_global_func: How to get global function.
+    :py:func:`tvm_ffi.register_global_func`
+        Register a Python callable as a global FFI function.
+    :py:func:`tvm_ffi.get_global_func`
+        Look up a previously registered global FFI function by name.
     """
     cdef int c_release_gil
     cdef dict __dict__
 
-    def __cinit__(self):
+    def __cinit__(self) -> None:
         self.c_release_gil = _RELEASE_GIL_BY_DEFAULT
 
     property release_gil:
-        def __get__(self):
+        """Whether calls release the Python GIL while executing."""
+
+        def __get__(self) -> bool:
             return self.c_release_gil != 0
 
-        def __set__(self, value):
+        def __set__(self, value: bool) -> None:
             self.c_release_gil = value
 
-    def __call__(self, *args):
+    def __call__(self, *args: Any) -> Any:
+        """Invoke the wrapped FFI function with ``args``."""
         cdef TVMFFIAny result
         cdef int c_api_ret_code
         cdef const DLPackExchangeAPI* c_ctx_dlpack_api = NULL
@@ -761,7 +907,7 @@ cdef class Function(Object):
     def __from_extern_c__(
         c_symbol: int,
         *,
-        keep_alive_object: object = None
+        keep_alive_object: object | None = None
     ) -> Function:
         """Convert a function from extern C address.
 
@@ -814,7 +960,7 @@ cdef class Function(Object):
     def __from_mlir_packed_safe_call__(
         mlir_packed_symbol: int,
         *,
-        keep_alive_object: object = None
+        keep_alive_object: object | None = None
     ) -> Function:
         """Convert a function from MLIR packed safe call function pointer.
 
@@ -864,10 +1010,8 @@ cdef class Function(Object):
         (<Object>func).chandle = chandle
         return func
 
-_register_object_by_index(kTVMFFIFunction, Function)
 
-
-def _register_global_func(name, pyfunc, override):
+def _register_global_func(name: str, pyfunc: Callable[..., Any] | Function, override: bool) -> Function:
     cdef TVMFFIObjectHandle chandle
     cdef int c_api_ret_code
     cdef int ioverride = override
@@ -880,7 +1024,7 @@ def _register_global_func(name, pyfunc, override):
     return pyfunc
 
 
-def _get_global_func(name, allow_missing):
+def _get_global_func(name: str, allow_missing: bool):
     cdef TVMFFIObjectHandle chandle
     cdef ByteArrayArg name_arg = ByteArrayArg(c_str(name))
 
@@ -937,7 +1081,7 @@ cdef inline int _convert_to_ffi_func_handle(
     return 0
 
 
-def _convert_to_ffi_func(object pyfunc):
+def _convert_to_ffi_func(object pyfunc: Callable[..., Any]) -> Function:
     """Convert a python function to TVM FFI function"""
     cdef TVMFFIObjectHandle chandle
     _convert_to_ffi_func_handle(pyfunc, &chandle)
@@ -959,7 +1103,7 @@ cdef inline int _convert_to_opaque_object_handle(
     return 0
 
 
-def _convert_to_opaque_object(object pyobject):
+def _convert_to_opaque_object(object pyobject: Any) -> OpaquePyObject:
     """Convert a python object to TVM FFI opaque object"""
     cdef TVMFFIObjectHandle chandle
     _convert_to_opaque_object_handle(pyobject, &chandle)
@@ -968,7 +1112,7 @@ def _convert_to_opaque_object(object pyobject):
     return ret
 
 
-def _print_debug_info():
+def _print_debug_info() -> None:
     """Get the size of the dispatch map"""
     cdef size_t size = TVMFFIPyGetDispatchMapSize()
     print(f"TVMFFIPyGetDispatchMapSize: {size}")

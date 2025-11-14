@@ -1,4 +1,3 @@
-#!/bin/bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,25 +14,28 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-set -ex
+import pathlib
 
-if command -v ninja >/dev/null 2>&1; then
-	generator="Ninja"
-else
-	echo "Ninja not found, falling back to Unix Makefiles" >&2
-	generator="Unix Makefiles"
-fi
+import numpy
+import pytest
+import tvm_ffi.cpp
+from tvm_ffi.module import Module
 
-rm -rf build/CMakeCache.txt
-cmake -G "$generator" -B build -S .
-cmake --build build --parallel
 
-# running python example
-python run_example.py
+def test_build_cpp() -> None:
+    cpp_path = pathlib.Path(__file__).parent.resolve() / "test_build.cc"
+    output_lib_path = tvm_ffi.cpp.build(
+        name="hello",
+        cpp_files=[str(cpp_path)],
+    )
 
-# running c++ example
-./build/run_example
+    mod: Module = tvm_ffi.load_module(output_lib_path)
 
-if [ -x ./build/run_example_cuda ]; then
-	./build/run_example_cuda
-fi
+    x = numpy.array([1, 2, 3, 4, 5], dtype=numpy.float32)
+    y = numpy.empty_like(x)
+    mod.add_one_cpu(x, y)
+    numpy.testing.assert_equal(x + 1, y)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])
