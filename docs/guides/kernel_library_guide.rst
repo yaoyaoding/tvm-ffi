@@ -72,7 +72,7 @@ To better adapt to the ML framework, it is **recommended** to reuse the framewor
 * Benefit from the framework's native caching allocator or related allocation mechanism.
 * Help framework tracking memory usage and planning globally.
 
-For this case, TVM FFI provides :cpp:func:`tvm::ffi::Tensor::FromEnvAlloc`. It internally calls the framework tensor allocator. To determine which framework tensor allocator, TVM FFI infers it from the passed-in framework tensors. For example, when calling the kernel library at Python side, there is an input framework tensor if of type ``torch.Tensor``, TVM FFI will automatically bind the :cpp:function:`at::empty` as the current framework tensor allocator by ``TVMFFIEnvTensorAlloc``. And then the :cpp:func:`~tvm::ffi::Tensor::FromEnvAlloc` is calling the :cpp:class:`at::empty` actually:
+For this case, TVM FFI provides :cpp:func:`tvm::ffi::Tensor::FromEnvAlloc`. It internally calls the framework tensor allocator. To determine which framework tensor allocator, TVM FFI infers it from the passed-in framework tensors. For example, when calling the kernel library at Python side, there is an input framework tensor if of type ``torch.Tensor``, TVM FFI will automatically bind the :cpp:func:`at::empty` as the current framework tensor allocator by ``TVMFFIEnvTensorAlloc``. And then the :cpp:func:`~tvm::ffi::Tensor::FromEnvAlloc` is calling the :cpp:class:`at::empty` actually:
 
 .. code-block:: c++
 
