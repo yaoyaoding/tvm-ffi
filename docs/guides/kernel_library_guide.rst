@@ -72,7 +72,7 @@ To better adapt to the ML framework, it is **recommended** to reuse the framewor
 * Benefit from the framework's native caching allocator or related allocation mechanism.
 * Help framework tracking memory usage and planning globally.
 
-For this case, TVM FFI provides :cpp:func:`tvm::ffi::Tensor::FromEnvAlloc`. It internally calls the framework tensor allocator. To determine which framework tensor allocator, TVM FFI infers it from the passed-in framework tensors. For example, when calling the kernel library at Python side, there is an input framework tensor if of type ``torch.Tensor``, TVM FFI will automatically bind the ``at::empty`` as the current framework tensor allocator by ``TVMFFIEnvTensorAlloc``. And then the :cpp:func:`~tvm::ffi::Tensor::FromEnvAlloc` is calling the ``at::empty`` actually:
+For this case, TVM FFI provides :cpp:func:`tvm::ffi::Tensor::FromEnvAlloc`. It internally calls the framework tensor allocator. To determine which framework tensor allocator, TVM FFI infers it from the passed-in framework tensors. For example, when calling the kernel library at Python side, there is an input framework tensor if of type ``torch.Tensor``, TVM FFI will automatically bind the :cpp:function:`at::empty` as the current framework tensor allocator by ``TVMFFIEnvTensorAlloc``. And then the :cpp:func:`~tvm::ffi::Tensor::FromEnvAlloc` is calling the :cpp:class:`at::empty` actually:
 
 .. code-block:: c++
 
@@ -87,7 +87,7 @@ which is equivalent to:
 FromNDAlloc
 ^^^^^^^^^^^
 
-:cpp:func:`tvm::ffi::Tensor::FromNDAlloc` can be used to create a tensor with custom memory allocator. It's used by the kernel provider if they don't want to rely on the framework tensor allocator. Instead, they provide their own custom allocator for tensor allocation and free.
+:cpp:func:`tvm::ffi::Tensor::FromNDAlloc` can be used to create a tensor with custom memory allocator. It's used by the kernel provider if they don't want to rely on the framework tensor allocator. Instead, they provide their own custom allocator and deleter for tensor allocation and free. However, the tensors allocated by ``FromNDAlloc`` only retain the function pointer to its custom allocator and deleter. The custom allocators and deletes are all owned by the kernel library still. So it is important to make sure the loaded kernel library, :py:class:`tvm_ffi.Module`, outlives the tensors allocated by ``FromNDAlloc``. Otherwise, the function pointers to the custom deleter will be invalid. Here a typical approach is to retain the loaded :py:class:`tvm_ffi.Module` globally or for the period of time. But ``FromEnvAlloc`` is free of this issue, which is more **recommended** in practice.
 
 
 FromDLPack
