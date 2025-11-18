@@ -44,13 +44,13 @@ It is also more lightweight. However, since :cpp:class:`~tvm::ffi::TensorView` i
 Tensor Attributes
 -----------------
 
-For the sake of convenience, :cpp:class:`~tvm::ffi::TensorView` and :cpp:class:`~tvm::ffi::Tensor` align the following attributes retrieval mehtods to :cpp:class:`torch-cpp:at::Tensor` interface, to obtain tensor basic attributes and storage pointer:
+For the sake of convenience, :cpp:class:`~tvm::ffi::TensorView` and :cpp:class:`~tvm::ffi::Tensor` align the following attributes retrieval mehtods to :cpp:class:`at::Tensor` interface, to obtain tensor basic attributes and storage pointer:
 ``dim``, ``dtype``, ``sizes``, ``size``, ``strides``, ``stride``, ``numel``, ``data_ptr``, ``device``, ``is_contiguous``
 
-:c:struct:`dlpack:DLDataType`
+:c:struct:`DLDataType`
  The ``dtype`` of the tensor. It's represented by a struct with three fields: code, bits, and lanes, defined by DLPack protocol.
 
-:c:struct:`dlpack:DLDevice`
+:c:struct:`DLDevice`
  The ``device`` where the tensor is stored. It is represented by a struct with two fields: device_type and device_id, defined by DLPack protocol.
 
 :cpp:class:`tvm::ffi::ShapeView`
