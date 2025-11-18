@@ -100,6 +100,47 @@ FromDLPackVersioned
 
 :cpp:func:`tvm::ffi::Tensor::FromDLPackVersioned` enables creating :cpp:class:`~tvm::ffi::Tensor` from ``DLManagedTensorVersioned*``, working with ``ToDLPackVersioned`` for DLPack C Tensor Object ``DLTensor`` exchange protocol. Both are used for DLPack post V1.0 API. It is used for wrapping the existing framework tensor to :cpp:class:`~tvm::ffi::Tensor` too.
 
+Stream
+======
+
+Besides of tensors, stream context is another key concept in kernel library, especially for kernel execution. And the kernel library should be able to obtain the current stream context from ML framework via TVM FFI.
+
+Stream Obtaining
+----------------
+
+In practice, TVM FFI maintains a stream context table per device type and index. And kernel libraries can obtain the current stream context on specific device by :cpp:func:`TVMFFIEnvGetStream`. Here is an example:
+
+.. code-block:: c++
+
+ void func(ffi::TensorView input, ...) {
+   ffi::DLDevice device = input.device();
+   cudaStream_t stream = reinterpret_cast<cudaStream_t>(TVMFFIEnvGetStream(device.device_type, device.device_id));
+ }
+
+which is equivalent to:
+
+.. code-block:: c++
+
+ void func(at::Tensor input, ...) {
+   c10::Device = input.device();
+   cudaStream_t stream = reinterpret_cast<cudaStream_t>(c10::cuda::getCurrentCUDAStream(device.index()).stream());
+ }
+
+Stream Update
+-------------
+
+Corresponding to :cpp:func:`TVMFFIEnvGetStream`, TVM FFI updates the stream context table via interface :cpp:func:`TVMFFIEnvSetStream`. But the updating methods can be implicit and explicit.
+
+Implicit Update
+^^^^^^^^^^^^^^^
+
+Similar to the tensor allocation :ref:`guides/kernel_library_guide:FromNDAlloc`, TVM FFI does the implicit update on stream context table as well. When converting the framework tensors as mentioned above, TVM FFI automatically updates the stream context table, by the device on which the converted framework tensors. For example, if there is an framework tensor as ``torch.Tensor(device="cuda:3")``, TVM FFI would automatically update the current stream of cuda device 3 to torch current context stream. So nothing for the kernel library to do with the stream context updaing, as long as the tensors from ML framework covers all the devices on which the stream contexts reside.
+
+Explicit Update
+^^^^^^^^^^^^^^^
+
+Once the devices on which the stream contexts reside cannot be inferred from the tensors, the explicit update on stream context table is necessary. TVM FFI provides :py:func:`tvm_ffi.use_torch_stream` and :py:func:`tvm_ffi.use_raw_stream` for manual stream context update. However, it is **recommended** to use implicit update above, to reduce code complexity.
+
 Python Calling FFI
 ==================
 
@@ -129,25 +170,3 @@ And then we compile the sources into ``func.so``, or ``func.dylib`` for macOS, o
 In constrast, if the kernel function returns :cpp:class:`~tvm::ffi::Tensor` instead of ``void`` in the example above. TVM FFI automatically converts the output :cpp:class:`~tvm::ffi::Tensor` to framework tensors also. The output framework is inferred from the input framework tensors. For example, if the input framework tensors are of ``torch.Tensor``, TVM FFI will convert the output tensor to ``torch.Tensor``. And if none of the input tensors are from ML framework, the output tensor will be the ``tvm_ffi.core.Tensor`` as fallback.
 
 Actually, it is **recommended** to pre-allocated input and output tensors from framework at Python side alreadly. So that the return type of kernel functions at C++ side should be ``void`` always.
-
-Context Inherit
----------------
-
-Also, when calling our kernel library at Python side, we usually need to pass the important context to the kernel library, for example, the CUDA stream context from ``torch.cuda.stream`` or ``torch.cuda.graph``. So that the kernels can be dispatched to the expected CUDA stream. TVM FFI has already made it by maintaining the stream context table per device type and index. And when converting the framework tensors as mentioned above, TVM FFI automatically updates the stream context table, by the device on which the converted framework tensors. For example, if there is an framework tensor as ``torch.Tensor(device="cuda:3")``, TVM FFI will automatically update the current stream of cuda device 3 to torch current context stream, by ``TVMFFIEnvSetStream``. And then at C++ side, we just use ``TVMFFIEnvGetStream`` to get the updated current stream on the specific device. Here is an example:
-
-.. code-block:: c++
-
- void func(ffi::TensorView input, ...) {
-   ffi::DLDevice device = input.device();
-   cudaStream_t stream = reinterpret_cast<cudaStream_t>(TVMFFIEnvGetStream(device.device_type, device.device_id));
- }
-
-which is equivalent to:
-
-
-.. code-block:: c++
-
- void func(at::Tensor input, ...) {
-   c10::Device = input.device();
-   cudaStream_t stream = reinterpret_cast<cudaStream_t>(c10::cuda::getCurrentCUDAStream(device.index()).stream());
- }
