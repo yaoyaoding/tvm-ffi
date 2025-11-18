@@ -141,15 +141,10 @@ Explicit Update
 
 Once the devices on which the stream contexts reside cannot be inferred from the tensors, the explicit update on stream context table is necessary. TVM FFI provides :py:func:`tvm_ffi.use_torch_stream` and :py:func:`tvm_ffi.use_raw_stream` for manual stream context update. However, it is **recommended** to use implicit update above, to reduce code complexity.
 
-Python Calling FFI
+Function Exporting
 ==================
 
-As we already have our kernel library wrapped with TVM FFI interface, our next and final step is exporting kernel library to Python side and enabling interaction with runtime environment or context.
-
-Function Exporting
-------------------
-
-TVM FFI provides macro :c:macro:`TVM_FFI_DLL_EXPORT_TYPED_FUNC` for exporting the kernel functions to the output library files. So that at Python side, it is possible to load the library files and call the kernel functions directly. For example, we export our kernels as:
+As we already have our kernel library wrapped with TVM FFI interface, our next and final step is exporting kernel library to Python side. TVM FFI provides macro :c:macro:`TVM_FFI_DLL_EXPORT_TYPED_FUNC` for exporting the kernel functions to the output library files. So that at Python side, it is possible to load the library files and call the kernel functions directly. For example, we export our kernels as:
 
 .. code-block:: c++
 
