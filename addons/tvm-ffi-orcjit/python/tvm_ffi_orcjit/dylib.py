@@ -21,8 +21,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from tvm_ffi import Function, get_global_func
+from tvm_ffi import Function, Module
 from tvm_ffi._ffi_api import ModuleGetFunction
+
+from . import _ffi_api
 
 if TYPE_CHECKING:
     from .session import ExecutionSession
@@ -58,9 +60,6 @@ class DynamicLibrary:
         """
         self._handle = handle
         self._session = session  # Keep session alive
-        self._add_func = get_global_func("orcjit.DynamicLibraryAdd")
-        self._set_link_order_func = get_global_func("orcjit.DynamicLibrarySetLinkOrder")
-        self._to_module_func = get_global_func("orcjit.DynamicLibraryToModule")
 
     def add(self, object_file: str | Path) -> None:
         """Add an object file to this dynamic library.
@@ -78,7 +77,7 @@ class DynamicLibrary:
         """
         if isinstance(object_file, Path):
             object_file = str(object_file)
-        self._add_func(self._handle, object_file)
+        _ffi_api.DynamicLibraryAdd(self._handle, object_file)
 
     def set_link_order(self, *libraries: DynamicLibrary) -> None:
         """Set the link order for symbol resolution.
@@ -105,7 +104,7 @@ class DynamicLibrary:
 
         """
         lib_handles = [lib._handle for lib in libraries]
-        self._set_link_order_func(self._handle, lib_handles)
+        _ffi_api.DynamicLibrarySetLinkOrder(self._handle, lib_handles)
 
     def get_function(self, name: str) -> Function:
         """Get a function from this dynamic library.
@@ -128,9 +127,7 @@ class DynamicLibrary:
 
         """
         # Get the module handle and use ModuleGetFunction
-        module_handle = self._to_module_func(self._handle)
-
-        func = ModuleGetFunction(module_handle, name, False)
+        func = ModuleGetFunction(self._handle, name, False)
         if func is None:
             raise AttributeError(f"Module has no function '{name}'")
         return func

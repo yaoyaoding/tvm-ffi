@@ -18,14 +18,15 @@
 
 from __future__ import annotations
 
-from typing import Any
 
-from tvm_ffi import get_global_func
+from tvm_ffi import Object, register_object
 
 from .dylib import DynamicLibrary
 
+from . import _ffi_api
 
-class ExecutionSession:
+
+class ExecutionSession(Object):
     """ORC JIT Execution Session.
 
     Manages the LLVM ORC JIT execution environment and creates dynamic libraries (JITDylibs).
@@ -33,24 +34,16 @@ class ExecutionSession:
 
     Examples
     --------
-    >>> session = create_session()
+    >>> session = ExecutionSession()
     >>> lib = session.create_library(name="main")
     >>> lib.add("add.o")
     >>> add_func = lib.get_function("add")
 
     """
 
-    def __init__(self, handle: Any) -> None:
-        """Initialize ExecutionSession from a handle.
-
-        Parameters
-        ----------
-        handle : object
-            The underlying C++ ORCJITExecutionSession object.
-
-        """
-        self._handle = handle
-        self._create_dylib_func = get_global_func("orcjit.SessionCreateDynamicLibrary")
+    def __init__(self) -> None:
+        """Initialize ExecutionSession from a handle."""
+        self.__init_handle_by_constructor__(_ffi_api.ExecutionSession)  # type: ignore
 
     def create_library(self, name: str = "") -> DynamicLibrary:
         """Create a new dynamic library associated with this execution session.
@@ -62,27 +55,5 @@ class ExecutionSession:
             A new DynamicLibrary instance.
 
         """
-        handle = self._create_dylib_func(self._handle, name)
+        handle = _ffi_api.ExecutionSessionCreateDynamicLibrary(self, name)  # type: ignore
         return DynamicLibrary(handle, self)
-
-
-def create_session() -> ExecutionSession:
-    """Create a new ORC JIT execution session.
-
-    This is the main entry point for using the ORC JIT system. The session
-    manages the LLVM ORC JIT infrastructure and allows creating dynamic libraries.
-
-    Returns
-    -------
-    ExecutionSession
-        A new execution session instance.
-
-    Examples
-    --------
-    >>> session = create_session()
-    >>> lib = session.create_library()
-
-    """
-    create_func = get_global_func("orcjit.CreateExecutionSession")
-    handle = create_func()
-    return ExecutionSession(handle)

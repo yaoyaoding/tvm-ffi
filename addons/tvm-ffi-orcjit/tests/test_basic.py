@@ -21,7 +21,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tvm_ffi_orcjit import create_session
+from tvm_ffi_orcjit import ExecutionSession
 
 
 def get_test_obj_file() -> Path:
@@ -93,13 +93,13 @@ def get_test_obj_file_conflict() -> Path:
 
 def test_create_session() -> None:
     """Test creating an execution session."""
-    session = create_session()
+    session = ExecutionSession()
     assert session is not None
 
 
 def test_create_library() -> None:
     """Test creating a dynamic library."""
-    session = create_session()
+    session = ExecutionSession()
     lib = session.create_library()
     assert lib is not None
 
@@ -110,7 +110,7 @@ def test_load_and_execute_function() -> None:
     obj_file = get_test_obj_file()
 
     # Create session and library
-    session = create_session()
+    session = ExecutionSession()
     lib = session.create_library()
 
     # Load object file
@@ -129,7 +129,7 @@ def test_load_and_execute_function() -> None:
 
 def test_multiple_libraries() -> None:
     """Test creating and using multiple libraries."""
-    session = create_session()
+    session = ExecutionSession()
 
     lib1 = session.create_library("lib1")
     lib2 = session.create_library("lib2")
@@ -143,7 +143,7 @@ def test_function_not_found() -> None:
     # Get pre-built test object file
     obj_file = get_test_obj_file()
 
-    session = create_session()
+    session = ExecutionSession()
     lib = session.create_library()
     lib.add(str(obj_file))
 
@@ -156,7 +156,7 @@ def test_gradually_add_objects_to_same_library() -> None:
     obj_file1 = get_test_obj_file()
     obj_file2 = get_test_obj_file2()
 
-    session = create_session()
+    session = ExecutionSession()
     lib = session.create_library()
 
     # Add first object file
@@ -189,7 +189,7 @@ def test_two_separate_libraries() -> None:
     obj_file1 = get_test_obj_file()
     obj_file2 = get_test_obj_file2()
 
-    session = create_session()
+    session = ExecutionSession()
 
     # Create first library with first object
     lib1 = session.create_library("lib1")
@@ -227,7 +227,7 @@ def test_symbol_conflict_same_library() -> None:
     obj_file1 = get_test_obj_file()
     obj_file_conflict = get_test_obj_file_conflict()
 
-    session = create_session()
+    session = ExecutionSession()
     lib = session.create_library()
 
     # Add first object file
@@ -247,7 +247,7 @@ def test_symbol_conflict_different_libraries() -> None:
     obj_file1 = get_test_obj_file()
     obj_file_conflict = get_test_obj_file_conflict()
 
-    session = create_session()
+    session = ExecutionSession()
 
     # Create first library with first object
     lib1 = session.create_library("lib1")

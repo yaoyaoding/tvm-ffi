@@ -75,8 +75,7 @@ ORCJITExecutionSession ORCJITExecutionSession::Create() {
   return ORCJITExecutionSession(obj);
 }
 
-ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSessionObj::CreateDynamicLibrary(
-    const String& name) {
+DynamicLibrary ORCJITExecutionSessionObj::CreateDynamicLibrary(const String& name) {
   TVM_FFI_CHECK(jit_ != nullptr, InternalError) << "ExecutionSession not initialized";
 
   // Generate name if not provided
@@ -132,11 +131,11 @@ ObjectPtr<ORCJITDynamicLibrary> ORCJITExecutionSessionObj::CreateDynamicLibrary(
   }
 
   // Create the wrapper object
-  auto dylib = make_object<ORCJITDynamicLibrary>(GetObjectPtr<ORCJITExecutionSessionObj>(this), &jd,
-                                                 jit_.get(), lib_name);
+  auto dylib = DynamicLibrary(make_object<DynamicLibraryObj>(
+      GetObjectPtr<ORCJITExecutionSessionObj>(this), &jd, jit_.get(), lib_name));
 
   // Store for lifetime management
-  dylibs_[lib_name] = dylib;
+  dylibs_.insert({lib_name, dylib});
 
   return dylib;
 }

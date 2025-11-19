@@ -33,6 +33,7 @@
 #include <tvm/ffi/cast.h>
 #include <tvm/ffi/container/array.h>
 #include <tvm/ffi/error.h>
+#include <tvm/ffi/extra/c_env_api.h>
 #include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/reflection/registry.h>
 
@@ -42,15 +43,14 @@ namespace tvm {
 namespace ffi {
 namespace orcjit {
 
-ORCJITDynamicLibrary::ORCJITDynamicLibrary(ObjectPtr<ORCJITExecutionSessionObj> session,
-                                           llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit,
-                                           String name)
+DynamicLibraryObj::DynamicLibraryObj(ObjectPtr<ORCJITExecutionSessionObj> session,
+                                     llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit, String name)
     : session_(std::move(session)), dylib_(dylib), jit_(jit), name_(std::move(name)) {
   TVM_FFI_CHECK(dylib_ != nullptr, ValueError) << "JITDylib cannot be null";
   TVM_FFI_CHECK(jit_ != nullptr, ValueError) << "LLJIT cannot be null";
 }
 
-void ORCJITDynamicLibrary::AddObjectFile(const String& path) {
+void DynamicLibraryObj::AddObjectFile(const String& path) {
   // Read object file
   auto buffer_or_err = llvm::MemoryBuffer::getFile(path.c_str());
   if (!buffer_or_err) {
@@ -67,23 +67,22 @@ void ORCJITDynamicLibrary::AddObjectFile(const String& path) {
   }
 }
 
-void ORCJITDynamicLibrary::SetLinkOrder(
-    const std::vector<ObjectPtr<ORCJITDynamicLibrary>>& libraries) {
+void DynamicLibraryObj::SetLinkOrder(const std::vector<llvm::orc::JITDylib*>& dylibs) {
   // Clear and rebuild the link order
   link_order_.clear();
 
-  for (const auto& lib : libraries) {
-    link_order_.push_back({lib->dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols});
+  for (auto* lib : dylibs) {
+    link_order_.emplace_back(lib, llvm::orc::JITDylibLookupFlags::MatchAllSymbols);
   }
 
   // Set the link order in the LLVM JITDylib
   dylib_->setLinkOrder(link_order_, false);
 }
 
-void* ORCJITDynamicLibrary::GetSymbol(const String& name) {
+void* DynamicLibraryObj::GetSymbol(const String& name) {
   // Build search order: this dylib first, then all linked dylibs
   llvm::orc::JITDylibSearchOrder search_order;
-  search_order.push_back({dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols});
+  search_order.emplace_back(dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols);
   // Append linked libraries
   search_order.insert(search_order.end(), link_order_.begin(), link_order_.end());
 
@@ -102,59 +101,33 @@ void* ORCJITDynamicLibrary::GetSymbol(const String& name) {
   return symbol_or_err->getAddress().toPtr<void*>();
 }
 
-llvm::orc::JITDylib& ORCJITDynamicLibrary::GetJITDylib() {
+llvm::orc::JITDylib& DynamicLibraryObj::GetJITDylib() {
   TVM_FFI_CHECK(dylib_ != nullptr, InternalError) << "JITDylib is null";
   return *dylib_;
 }
 
-//-------------------------------------
-// Module wrapper for DynamicLibrary
-//-------------------------------------
+Optional<Function> DynamicLibraryObj::GetFunction(const String& name) {
+  // TVM-FFI exports have __tvm_ffi_ prefix
+  std::string symbol_name = "__tvm_ffi_" + std::string(name);
 
-class DynamicLibraryModuleObj : public ModuleObj {
- public:
-  explicit DynamicLibraryModuleObj(ObjectPtr<ORCJITDynamicLibrary> dylib)
-      : dylib_(std::move(dylib)) {}
-
-  const char* kind() const final { return "orcjit_dynamic_library"; }
-
-  Optional<Function> GetFunction(const String& name) override {
-    // TVM-FFI exports have __tvm_ffi_ prefix
-    std::string symbol_name = "__tvm_ffi_" + std::string(name);
-
-    // Try to get the symbol - return NullOpt if not found
-    void* symbol = nullptr;
-    try {
-      symbol = dylib_->GetSymbol(symbol_name);
-    } catch (const Error& e) {
-      // Symbol not found
-      return Optional<Function>();
-    }
-
-    // Wrap C function pointer as tvm-ffi Function
-    using TVMFFISafeCallType =
-        int (*)(void* handle, const TVMFFIAny* args, int32_t num_args, TVMFFIAny* rv);
-    auto c_func = reinterpret_cast<TVMFFISafeCallType>(symbol);
-
-    return Function::FromPacked([c_func, name](PackedArgs args, Any* rv) {
-      std::vector<AnyView> arg_views;
-      arg_views.reserve(args.size());
-      for (int i = 0; i < args.size(); ++i) {
-        arg_views.push_back(args[i]);
-      }
-
-      int ret_code = c_func(nullptr, reinterpret_cast<const TVMFFIAny*>(arg_views.data()),
-                            static_cast<int32_t>(args.size()), reinterpret_cast<TVMFFIAny*>(rv));
-
-      if (ret_code != 0) {
-        TVM_FFI_THROW(RuntimeError) << "Function '" << name << "' returned error code " << ret_code;
-      }
-    });
+  // Try to get the symbol - return NullOpt if not found
+  void* symbol = nullptr;
+  try {
+    symbol = GetSymbol(symbol_name);
+  } catch (const Error& e) {
+    // Symbol not found
+    return std::nullopt;
   }
 
- private:
-  ObjectPtr<ORCJITDynamicLibrary> dylib_;
-};
+  // Wrap C function pointer as tvm-ffi Function
+  auto c_func = reinterpret_cast<TVMFFISafeCallType>(symbol);
+
+  return Function::FromPacked([c_func, name](PackedArgs args, Any* rv) {
+    TVM_FFI_ICHECK_LT(rv->type_index(), ffi::TypeIndex::kTVMFFIStaticObjectBegin);
+    TVM_FFI_CHECK_SAFE_CALL((*c_func)(nullptr, reinterpret_cast<const TVMFFIAny*>(args.data()),
+                                      args.size(), reinterpret_cast<TVMFFIAny*>(rv)));
+  });
+}
 
 //-------------------------------------
 // Registration
@@ -168,34 +141,24 @@ static void RegisterOrcJITFunctions() {
   namespace refl = tvm::ffi::reflection;
 
   refl::GlobalDef()
-      .def("orcjit.CreateExecutionSession",
-           []() -> ORCJITExecutionSession { return ORCJITExecutionSession::Create(); })
-      .def("orcjit.SessionCreateDynamicLibrary",
-           [](ORCJITExecutionSession session, String name) -> ObjectRef {
-             auto session_obj = GetObjectPtr<ORCJITExecutionSessionObj>(
-                 const_cast<ORCJITExecutionSessionObj*>(session.as<ORCJITExecutionSessionObj>()));
-             return ObjectRef(session_obj->CreateDynamicLibrary(name));
+      .def("orcjit.ExecutionSession", ORCJITExecutionSession::Create)
+      .def("orcjit.ExecutionSessionCreateDynamicLibrary",
+           [](const ORCJITExecutionSession& session, const String& name) -> ObjectRef {
+             return session->CreateDynamicLibrary(name);
            })
       .def("orcjit.DynamicLibraryAdd",
-           [](ORCJITDynamicLibrary* dylib, String path) { dylib->AddObjectFile(path); })
+           [](const DynamicLibrary& dylib, const String& path) { dylib->AddObjectFile(path); })
       .def("orcjit.DynamicLibrarySetLinkOrder",
-           [](ORCJITDynamicLibrary* dylib, Array<ObjectRef> libraries) {
-             std::vector<ObjectPtr<ORCJITDynamicLibrary>> lib_ptrs;
-             lib_ptrs.reserve(libraries.size());
-             for (const auto& lib_ref : libraries) {
-               auto* lib = lib_ref.as<ORCJITDynamicLibrary>();
-               auto lib_ptr =
-                   GetObjectPtr<ORCJITDynamicLibrary>(const_cast<ORCJITDynamicLibrary*>(lib));
-               lib_ptrs.push_back(lib_ptr);
+           [](const DynamicLibrary& dylib, const Array<DynamicLibrary>& libraries) {
+             std::vector<llvm::orc::JITDylib*> libs;
+             libs.reserve(libraries.size());
+             for (const auto& lib : libraries) {
+               libs.push_back(&lib->GetJITDylib());
              }
-             dylib->SetLinkOrder(lib_ptrs);
+             dylib->SetLinkOrder(libs);
            })
       .def("orcjit.DynamicLibraryGetName",
-           [](ORCJITDynamicLibrary* dylib) -> String { return dylib->GetName(); })
-      .def("orcjit.DynamicLibraryToModule", [](ORCJITDynamicLibrary* dylib) -> Module {
-        return Module(
-            make_object<DynamicLibraryModuleObj>(GetObjectPtr<ORCJITDynamicLibrary>(dylib)));
-      });
+           [](const DynamicLibrary& dylib) -> String { return dylib->GetName(); });
 }
 
 TVM_FFI_STATIC_INIT_BLOCK() {

@@ -26,6 +26,8 @@
 
 #include <llvm/ExecutionEngine/Orc/Core.h>
 #include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <tvm/ffi/container/array.h>
+#include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/object.h>
 #include <tvm/ffi/string.h>
 
@@ -38,15 +40,7 @@ namespace orcjit {
 
 class ORCJITExecutionSessionObj;
 
-/*!
- * \brief DynamicLibrary wrapper for LLVM ORC JIT v2 JITDylib
- *
- * This class wraps an LLVM JITDylib and provides functionality to:
- * - Load object files
- * - Link against other dynamic libraries
- * - Look up symbols
- */
-class ORCJITDynamicLibrary : public Object {
+class DynamicLibraryObj : public ModuleObj {
  public:
   /*!
    * \brief Add an object file to this library
@@ -56,12 +50,12 @@ class ORCJITDynamicLibrary : public Object {
 
   /*!
    * \brief Set the link order for symbol resolution
-   * \param libraries Vector of libraries to search for symbols (in order)
+   * \param dylibs Vector of libraries to search for symbols (in order)
    *
    * When resolving symbols, this library will search in the specified libraries
    * in the order provided. This replaces any previous link order.
    */
-  void SetLinkOrder(const std::vector<ObjectPtr<ORCJITDynamicLibrary>>& libraries);
+  void SetLinkOrder(const std::vector<llvm::orc::JITDylib*>& dylibs);
 
   /*!
    * \brief Look up a symbol in this library
@@ -82,9 +76,6 @@ class ORCJITDynamicLibrary : public Object {
    */
   String GetName() const { return name_; }
 
-  static constexpr bool _type_mutable = true;
-  TVM_FFI_DECLARE_OBJECT_INFO_FINAL("orcjit.DynamicLibrary", ORCJITDynamicLibrary, Object);
-
   /*!
    * \brief Constructor
    * \param session The parent execution session
@@ -92,8 +83,12 @@ class ORCJITDynamicLibrary : public Object {
    * \param jit The LLJIT instance
    * \param name The library name
    */
-  ORCJITDynamicLibrary(ObjectPtr<ORCJITExecutionSessionObj> session, llvm::orc::JITDylib* dylib,
-                       llvm::orc::LLJIT* jit, String name);
+  DynamicLibraryObj(ObjectPtr<ORCJITExecutionSessionObj> session, llvm::orc::JITDylib* dylib,
+                    llvm::orc::LLJIT* jit, String name);
+
+  const char* kind() const final { return "orcjit_dynamic_library"; }
+
+  Optional<Function> GetFunction(const String& name) override;
 
  private:
   /*! \brief Parent execution session (for lifetime management) */
@@ -110,6 +105,20 @@ class ORCJITDynamicLibrary : public Object {
 
   /*! \brief Link order tracking (to support incremental linking) */
   llvm::orc::JITDylibSearchOrder link_order_;
+};
+
+/*!
+ * \brief DynamicLibrary wrapper for LLVM ORC JIT v2 JITDylib
+ *
+ * This class wraps an LLVM JITDylib and provides functionality to:
+ * - Load object files
+ * - Link against other dynamic libraries
+ * - Look up symbols
+ */
+class DynamicLibrary : public Module {
+ public:
+  explicit DynamicLibrary(const ObjectPtr<DynamicLibraryObj>& ptr) : Module(ptr){};
+  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NOTNULLABLE(DynamicLibrary, Module, DynamicLibraryObj);
 };
 
 }  // namespace orcjit

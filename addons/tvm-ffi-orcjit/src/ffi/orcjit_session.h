@@ -37,7 +37,7 @@ namespace ffi {
 namespace orcjit {
 
 // Forward declaration
-class ORCJITDynamicLibrary;
+class DynamicLibrary;
 
 /*!
  * \brief ExecutionSession object for LLVM ORC JIT v2
@@ -62,7 +62,7 @@ class ORCJITExecutionSessionObj : public Object {
    * \param name Optional name for the library (for debugging)
    * \return The created dynamic library instance
    */
-  ObjectPtr<ORCJITDynamicLibrary> CreateDynamicLibrary(const String& name);
+  DynamicLibrary CreateDynamicLibrary(const String& name);
 
   /*!
    * \brief Get the underlying LLVM ExecutionSession
@@ -87,7 +87,7 @@ class ORCJITExecutionSessionObj : public Object {
   int dylib_counter_ = 0;
 
   /*! \brief Map of created dynamic libraries for lifetime management */
-  std::unordered_map<std::string, ObjectPtr<ORCJITDynamicLibrary>> dylibs_;
+  std::unordered_map<std::string, DynamicLibrary> dylibs_;
 };
 
 /*!
