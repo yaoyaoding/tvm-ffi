@@ -627,7 +627,12 @@ def _generate_ninja_build(
 
     # append include paths
     for path in include_paths:
-        cflags.append("-I{}".format(path.replace(":", "$:")))
+        path_str = str(path)
+        if " " in path_str:
+            path_str = f'"{path_str}"'
+        if IS_WINDOWS:
+            path_str = path_str.replace(":", "$:")
+        cflags.append(f"-I{path_str}")
 
     # flags
     ninja = []
@@ -795,9 +800,13 @@ def main() -> None:  # noqa: PLR0912, PLR0915
         if IS_WINDOWS:
             # On Windows, use .lib format for linking
             ldflags.extend(["c10.lib", "torch.lib", "torch_cpu.lib", "torch_python.lib"])
+            if args.build_with_cuda:
+                ldflags.extend(["torch_cuda.lib", "c10_cuda.lib"])
         else:
             # On Unix/macOS, use -l format for linking
             ldflags.extend(["-lc10", "-ltorch", "-ltorch_cpu", "-ltorch_python"])
+            if args.build_with_cuda:
+                ldflags.extend(["-ltorch_cuda", "-lc10_cuda"])
 
         # Add Python library linking
         if IS_WINDOWS:

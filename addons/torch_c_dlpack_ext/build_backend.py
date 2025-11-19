@@ -40,8 +40,6 @@ build_editable = orig.build_editable
 def _is_lib_prebuilt() -> bool:
     if sys.platform.startswith("win32"):
         extension = "dll"
-    elif sys.platform.startswith("darwin"):
-        extension = "dylib"
     else:
         extension = "so"
     return next(_package_path.rglob(f"*.{extension}"), None) is not None
@@ -75,10 +73,15 @@ def build_wheel(
             )
         else:
             extra_args = []
-            if torch.version.cuda is not None:
-                extra_args.append("--build-with-cuda")
-            elif torch.version.hip is not None:
-                extra_args.append("--build-with-rocm")
+            # First use "torch.cuda.is_available()" to check whether GPU environment
+            # is available. Then determine the GPU type.
+            if torch.cuda.is_available():
+                if torch.version.cuda is not None:
+                    extra_args.append("--build-with-cuda")
+                elif torch.version.hip is not None:
+                    extra_args.append("--build-with-rocm")
+                else:
+                    raise ValueError("Cannot determine whether to build with CUDA or ROCm.")
             subprocess.run(
                 [
                     sys.executable,

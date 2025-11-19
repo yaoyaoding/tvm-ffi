@@ -157,6 +157,8 @@ intersphinx_mapping = {
     "pillow": ("https://pillow.readthedocs.io/en/stable", None),
     "numpy": ("https://numpy.org/doc/stable", None),
     "torch": ("https://pytorch.org/docs/stable", None),
+    "torch-cpp": ("https://docs.pytorch.org/cppdocs/", None),
+    "dlpack": ("https://dmlc.github.io/dlpack/latest", None),
 }
 
 autosummary_generate = True  # actually create stub pages
@@ -463,3 +465,6 @@ html_extra_path = ["reference/rust/generated"] if build_rust_docs else []
 
 
 html_css_files = ["custom.css"]
+
+
+show_warning_types = True
