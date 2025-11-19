@@ -33,7 +33,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
 
 
-from tvm_ffi_orcjit import create_session
+from tvm_ffi_orcjit import ExecutionSession
 
 
 def main() -> int:
@@ -48,7 +48,7 @@ def main() -> int:
     print(f"Loading object file: {obj_file}")
 
     # Create execution session and dynamic library
-    session = create_session()
+    session = ExecutionSession()
     lib = session.create_library()
     lib.add(str(obj_file))
 
