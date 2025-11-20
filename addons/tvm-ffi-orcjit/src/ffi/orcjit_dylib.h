@@ -40,8 +40,23 @@ namespace orcjit {
 
 class ORCJITExecutionSessionObj;
 
-class DynamicLibraryObj : public ModuleObj {
+class ORCJITDynamicLibraryObj : public ModuleObj {
  public:
+  /*!
+   * \brief Constructor
+   * \param session The parent execution session
+   * \param dylib The LLVM JITDylib
+   * \param jit The LLJIT instance
+   * \param name The library name
+   */
+  ORCJITDynamicLibraryObj(ObjectPtr<ORCJITExecutionSessionObj> session, llvm::orc::JITDylib* dylib,
+                          llvm::orc::LLJIT* jit, String name);
+
+  const char* kind() const final { return "orcjit"; }
+
+  Optional<Function> GetFunction(const String& name) override;
+
+ private:
   /*!
    * \brief Add an object file to this library
    * \param path Path to the object file to load
@@ -76,21 +91,6 @@ class DynamicLibraryObj : public ModuleObj {
    */
   String GetName() const { return name_; }
 
-  /*!
-   * \brief Constructor
-   * \param session The parent execution session
-   * \param dylib The LLVM JITDylib
-   * \param jit The LLJIT instance
-   * \param name The library name
-   */
-  DynamicLibraryObj(ObjectPtr<ORCJITExecutionSessionObj> session, llvm::orc::JITDylib* dylib,
-                    llvm::orc::LLJIT* jit, String name);
-
-  const char* kind() const final { return "orcjit_dynamic_library"; }
-
-  Optional<Function> GetFunction(const String& name) override;
-
- private:
   /*! \brief Parent execution session (for lifetime management) */
   ObjectPtr<ORCJITExecutionSessionObj> session_;
 
@@ -115,10 +115,11 @@ class DynamicLibraryObj : public ModuleObj {
  * - Link against other dynamic libraries
  * - Look up symbols
  */
-class DynamicLibrary : public Module {
+class ORCJITDynamicLibrary : public Module {
  public:
-  explicit DynamicLibrary(const ObjectPtr<DynamicLibraryObj>& ptr) : Module(ptr){};
-  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NOTNULLABLE(DynamicLibrary, Module, DynamicLibraryObj);
+  explicit ORCJITDynamicLibrary(const ObjectPtr<ORCJITDynamicLibraryObj>& ptr) : Module(ptr){};
+  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NOTNULLABLE(ORCJITDynamicLibrary, Module,
+                                                ORCJITDynamicLibraryObj);
 };
 
 }  // namespace orcjit

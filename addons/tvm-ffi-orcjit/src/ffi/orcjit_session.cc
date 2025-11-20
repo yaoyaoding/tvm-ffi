@@ -38,7 +38,6 @@
 #include <sstream>
 
 #include "orcjit_dylib.h"
-#include "tvm/ffi/extra/module.h"
 #include "tvm/ffi/object.h"
 
 namespace tvm {
@@ -77,7 +76,7 @@ ORCJITExecutionSession::ORCJITExecutionSession() {
   data_ = std::move(obj);
 }
 
-DynamicLibrary ORCJITExecutionSessionObj::CreateDynamicLibrary(const String& name) {
+ORCJITDynamicLibrary ORCJITExecutionSessionObj::CreateDynamicLibrary(const String& name) {
   TVM_FFI_CHECK(jit_ != nullptr, InternalError) << "ExecutionSession not initialized";
 
   // Generate name if not provided
@@ -133,7 +132,7 @@ DynamicLibrary ORCJITExecutionSessionObj::CreateDynamicLibrary(const String& nam
   }
 
   // Create the wrapper object
-  auto dylib = DynamicLibrary(make_object<DynamicLibraryObj>(
+  auto dylib = ORCJITDynamicLibrary(make_object<ORCJITDynamicLibraryObj>(
       GetObjectPtr<ORCJITExecutionSessionObj>(this), &jd, jit_.get(), lib_name));
 
   // Store for lifetime management

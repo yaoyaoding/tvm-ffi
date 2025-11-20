@@ -19,18 +19,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
 
-from tvm_ffi import Function, Module
-from tvm_ffi._ffi_api import ModuleGetFunction
-
-from . import _ffi_api
-
-if TYPE_CHECKING:
-    from .session import ExecutionSession
+from tvm_ffi import Module
 
 
-class DynamicLibrary:
+class DynamicLibrary(Module):
     """ORC JIT Dynamic Library (JITDylib).
 
     Represents a collection of symbols that can be loaded from object files and linked
@@ -46,20 +39,6 @@ class DynamicLibrary:
     >>> result = add_func(1, 2)
 
     """
-
-    def __init__(self, handle: Any, session: ExecutionSession) -> None:
-        """Initialize DynamicLibrary from a handle.
-
-        Parameters
-        ----------
-        handle : object
-            The underlying C++ ORCJITDynamicLibrary object.
-        session : ExecutionSession
-            The parent execution session (kept alive for the library's lifetime).
-
-        """
-        self._handle = handle
-        self._session = session  # Keep session alive
 
     def add(self, object_file: str | Path) -> None:
         """Add an object file to this dynamic library.
@@ -77,7 +56,7 @@ class DynamicLibrary:
         """
         if isinstance(object_file, Path):
             object_file = str(object_file)
-        _ffi_api.DynamicLibraryAdd(self._handle, object_file)
+        self.get_function("add")(object_file)
 
     def set_link_order(self, *libraries: DynamicLibrary) -> None:
         """Set the link order for symbol resolution.
@@ -103,31 +82,4 @@ class DynamicLibrary:
         >>> lib_main.set_link_order(lib_utils, lib_core)
 
         """
-        lib_handles = [lib._handle for lib in libraries]
-        _ffi_api.DynamicLibrarySetLinkOrder(self._handle, lib_handles)
-
-    def get_function(self, name: str) -> Function:
-        """Get a function from this dynamic library.
-
-        Parameters
-        ----------
-        name : str
-            The name of the function to retrieve.
-
-        Returns
-        -------
-        callable
-            The function object that can be called from Python.
-
-        Examples
-        --------
-        >>> lib.add("add.o")
-        >>> add_func = lib.get_function("add")
-        >>> result = add_func(1, 2)
-
-        """
-        # Get the module handle and use ModuleGetFunction
-        func = ModuleGetFunction(self._handle, name, False)
-        if func is None:
-            raise AttributeError(f"Module has no function '{name}'")
-        return func
+        self.get_function("set_link_order")(libraries)

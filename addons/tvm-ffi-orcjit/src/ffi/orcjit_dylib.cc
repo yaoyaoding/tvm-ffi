@@ -38,19 +38,21 @@
 #include <tvm/ffi/reflection/registry.h>
 
 #include "orcjit_session.h"
+#include "tvm/ffi/function.h"
 
 namespace tvm {
 namespace ffi {
 namespace orcjit {
 
-DynamicLibraryObj::DynamicLibraryObj(ObjectPtr<ORCJITExecutionSessionObj> session,
-                                     llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit, String name)
+ORCJITDynamicLibraryObj::ORCJITDynamicLibraryObj(ObjectPtr<ORCJITExecutionSessionObj> session,
+                                                 llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit,
+                                                 String name)
     : session_(std::move(session)), dylib_(dylib), jit_(jit), name_(std::move(name)) {
   TVM_FFI_CHECK(dylib_ != nullptr, ValueError) << "JITDylib cannot be null";
   TVM_FFI_CHECK(jit_ != nullptr, ValueError) << "LLJIT cannot be null";
 }
 
-void DynamicLibraryObj::AddObjectFile(const String& path) {
+void ORCJITDynamicLibraryObj::AddObjectFile(const String& path) {
   // Read object file
   auto buffer_or_err = llvm::MemoryBuffer::getFile(path.c_str());
   if (!buffer_or_err) {
@@ -67,7 +69,7 @@ void DynamicLibraryObj::AddObjectFile(const String& path) {
   }
 }
 
-void DynamicLibraryObj::SetLinkOrder(const std::vector<llvm::orc::JITDylib*>& dylibs) {
+void ORCJITDynamicLibraryObj::SetLinkOrder(const std::vector<llvm::orc::JITDylib*>& dylibs) {
   // Clear and rebuild the link order
   link_order_.clear();
 
@@ -79,7 +81,7 @@ void DynamicLibraryObj::SetLinkOrder(const std::vector<llvm::orc::JITDylib*>& dy
   dylib_->setLinkOrder(link_order_, false);
 }
 
-void* DynamicLibraryObj::GetSymbol(const String& name) {
+void* ORCJITDynamicLibraryObj::GetSymbol(const String& name) {
   // Build search order: this dylib first, then all linked dylibs
   llvm::orc::JITDylibSearchOrder search_order;
   search_order.emplace_back(dylib_, llvm::orc::JITDylibLookupFlags::MatchAllSymbols);
@@ -101,14 +103,28 @@ void* DynamicLibraryObj::GetSymbol(const String& name) {
   return symbol_or_err->getAddress().toPtr<void*>();
 }
 
-llvm::orc::JITDylib& DynamicLibraryObj::GetJITDylib() {
+llvm::orc::JITDylib& ORCJITDynamicLibraryObj::GetJITDylib() {
   TVM_FFI_CHECK(dylib_ != nullptr, InternalError) << "JITDylib is null";
   return *dylib_;
 }
 
-Optional<Function> DynamicLibraryObj::GetFunction(const String& name) {
+Optional<Function> ORCJITDynamicLibraryObj::GetFunction(const String& name) {
+  if (name == "add") {
+    return Function::FromTyped([this](const String& path) { AddObjectFile(path); });
+  }
+  if (name == "set_link_order") {
+    return Function::FromTyped([this](const Array<ORCJITDynamicLibrary>& libraries) {
+      std::vector<llvm::orc::JITDylib*> libs;
+      libs.reserve(libraries.size());
+      for (const auto& lib : libraries) {
+        libs.push_back(&GetJITDylib());
+      }
+      SetLinkOrder(libs);
+    });
+  }
+
   // TVM-FFI exports have __tvm_ffi_ prefix
-  std::string symbol_name = "__tvm_ffi_" + std::string(name);
+  std::string symbol_name = symbol::tvm_ffi_symbol_prefix + std::string(name);
 
   // Try to get the symbol - return NullOpt if not found
   void* symbol = nullptr;
@@ -147,20 +163,7 @@ static void RegisterOrcJITFunctions() {
       .def("orcjit.ExecutionSessionCreateDynamicLibrary",
            [](const ORCJITExecutionSession& session, const String& name) -> Module {
              return session->CreateDynamicLibrary(name);
-           })
-      .def("orcjit.DynamicLibraryAdd",
-           [](const DynamicLibrary& dylib, const String& path) { dylib->AddObjectFile(path); })
-      .def("orcjit.DynamicLibrarySetLinkOrder",
-           [](const DynamicLibrary& dylib, const Array<DynamicLibrary>& libraries) {
-             std::vector<llvm::orc::JITDylib*> libs;
-             libs.reserve(libraries.size());
-             for (const auto& lib : libraries) {
-               libs.push_back(&lib->GetJITDylib());
-             }
-             dylib->SetLinkOrder(libs);
-           })
-      .def("orcjit.DynamicLibraryGetName",
-           [](const DynamicLibrary& dylib) -> String { return dylib->GetName(); });
+           });
 }
 
 TVM_FFI_STATIC_INIT_BLOCK() {
