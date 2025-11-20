@@ -109,10 +109,10 @@ llvm::orc::JITDylib& ORCJITDynamicLibraryObj::GetJITDylib() {
 }
 
 Optional<Function> ORCJITDynamicLibraryObj::GetFunction(const String& name) {
-  if (name == "add") {
+  if (name == "orcjit.add_object_file") {
     return Function::FromTyped([this](const String& path) { AddObjectFile(path); });
   }
-  if (name == "set_link_order") {
+  if (name == "orcjit.set_link_order") {
     return Function::FromTyped([this](const Array<ORCJITDynamicLibrary>& libraries) {
       std::vector<llvm::orc::JITDylib*> libs;
       libs.reserve(libraries.size());

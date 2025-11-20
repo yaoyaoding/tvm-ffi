@@ -56,7 +56,7 @@ class DynamicLibrary(Module):
         """
         if isinstance(object_file, Path):
             object_file = str(object_file)
-        self.get_function("add")(object_file)
+        self.get_function("orcjit.add_object_file")(object_file)
 
     def set_link_order(self, *libraries: DynamicLibrary) -> None:
         """Set the link order for symbol resolution.
@@ -82,4 +82,4 @@ class DynamicLibrary(Module):
         >>> lib_main.set_link_order(lib_utils, lib_core)
 
         """
-        self.get_function("set_link_order")(libraries)
+        self.get_function("orcjit.set_link_order")(libraries)
