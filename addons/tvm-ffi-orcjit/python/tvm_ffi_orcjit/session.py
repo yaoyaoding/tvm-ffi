@@ -26,6 +26,7 @@ from .dylib import DynamicLibrary
 from . import _ffi_api
 
 
+@register_object("orcjit.ExecutionSession")
 class ExecutionSession(Object):
     """ORC JIT Execution Session.
 

@@ -69,9 +69,3 @@ install(
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin
 )
-
-# For Python package building
-if (SKBUILD)
-  # Install shared library alongside Python modules
-  install(TARGETS tvm_ffi_orcjit LIBRARY DESTINATION .)
-endif ()

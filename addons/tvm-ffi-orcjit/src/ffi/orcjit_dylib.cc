@@ -140,10 +140,12 @@ static void RegisterOrcJITFunctions() {
 
   namespace refl = tvm::ffi::reflection;
 
+  refl::ObjectDef<ORCJITExecutionSessionObj>();
+
   refl::GlobalDef()
-      .def("orcjit.ExecutionSession", ORCJITExecutionSession::Create)
+      .def("orcjit.ExecutionSession", []() { return ORCJITExecutionSession(); })
       .def("orcjit.ExecutionSessionCreateDynamicLibrary",
-           [](const ORCJITExecutionSession& session, const String& name) -> ObjectRef {
+           [](const ORCJITExecutionSession& session, const String& name) -> Module {
              return session->CreateDynamicLibrary(name);
            })
       .def("orcjit.DynamicLibraryAdd",

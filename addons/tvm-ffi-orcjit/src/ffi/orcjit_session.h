@@ -101,11 +101,11 @@ class ORCJITExecutionSession : public ObjectRef {
    * \brief Create a new ExecutionSession
    * \return The created execution session instance
    */
-  static ORCJITExecutionSession Create();
+  ORCJITExecutionSession();
 
   // Required: define object reference methods
-  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NULLABLE(ORCJITExecutionSession, ObjectRef,
-                                             ORCJITExecutionSessionObj);
+  TVM_FFI_DEFINE_OBJECT_REF_METHODS_NOTNULLABLE(ORCJITExecutionSession, ObjectRef,
+                                                ORCJITExecutionSessionObj);
 };
 
 }  // namespace orcjit

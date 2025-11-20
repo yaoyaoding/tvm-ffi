@@ -16,7 +16,7 @@
 # under the License.
 
 [build-system]
-requires = ["scikit-build-core>=0.3.3", "apache-tvm-ffi"]
+requires = ["scikit-build-core>=0.10.0", "apache-tvm-ffi"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -46,10 +46,26 @@ Homepage = "https://github.com/apache/tvm-ffi"
 Repository = "https://github.com/apache/tvm-ffi"
 
 [tool.scikit-build]
-cmake.minimum-version = "3.18"
+cmake.version = "CMakeLists.txt"
 cmake.build-type = "Release"
 wheel.py-api = "py3"
+build-dir = "build"
+build.verbose = true
+editable.rebuild = false
+editable.verbose = true
+wheel.packages = ["python/tvm_ffi_orcjit"]
+wheel.install-dir = "tvm_ffi_orcjit"
 # Don't set install-dir, let it use the default python/ directory
+sdist.include = [
+  "/README.md",
+  "/LICENSE",
+  "/pyproject.toml",
+  "/CMakeLists.txt",
+  "/include/**/*.h",
+  "/src/**/*.cc",
+  "/src/**/*.cpp",
+  "/python/**/*.py"
+]
 
 [tool.scikit-build.cmake.define]
 CMAKE_EXPORT_COMPILE_COMMANDS = "ON"

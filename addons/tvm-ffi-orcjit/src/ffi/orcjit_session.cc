@@ -38,6 +38,8 @@
 #include <sstream>
 
 #include "orcjit_dylib.h"
+#include "tvm/ffi/extra/module.h"
+#include "tvm/ffi/object.h"
 
 namespace tvm {
 namespace ffi {
@@ -69,10 +71,10 @@ void ORCJITExecutionSessionObj::Initialize() {
   jit_ = std::move(*jit_or_err);
 }
 
-ORCJITExecutionSession ORCJITExecutionSession::Create() {
-  auto obj = make_object<ORCJITExecutionSessionObj>();
+ORCJITExecutionSession::ORCJITExecutionSession() {
+  ObjectPtr<ORCJITExecutionSessionObj> obj = make_object<ORCJITExecutionSessionObj>();
   obj->Initialize();
-  return ORCJITExecutionSession(obj);
+  data_ = std::move(obj);
 }
 
 DynamicLibrary ORCJITExecutionSessionObj::CreateDynamicLibrary(const String& name) {

@@ -32,7 +32,6 @@ Example:
 
 import ctypes
 import platform
-import sys
 from pathlib import Path
 
 from tvm_ffi import load_module
@@ -46,28 +45,21 @@ else:
     _LIB_EXT = "so"
 
 # Load the orcjit extension library
-_LIB_PATH = Path(__file__).parent.parent.parent / f"libtvm_ffi_orcjit.{_LIB_EXT}"
+_LIB_PATH = [
+    Path(__file__).parent.parent.parent / "lib" / f"libtvm_ffi_orcjit.{_LIB_EXT}",
+    Path(__file__).parent.parent.parent / "build" / f"libtvm_ffi_orcjit.{_LIB_EXT}",
+]
 _lib_path_str = None
-if _LIB_PATH.exists():
-    _lib_module = load_module(str(_LIB_PATH))
-    _lib_path_str = str(_LIB_PATH)
-else:
-    # Fallback: search in site-packages (installed location)
-    found = False
-    for site_pkg in sys.path:
-        candidate = Path(site_pkg) / f"libtvm_ffi_orcjit.{_LIB_EXT}"
-        if candidate.exists():
-            _lib_module = load_module(str(candidate))
-            _lib_path_str = str(candidate)
-            found = True
-            break
-
-    if not found:
-        raise RuntimeError(
-            f"Could not find libtvm_ffi_orcjit.{_LIB_EXT}. "
-            f"Searched in {_LIB_PATH} and site-packages. "
-            f"Please ensure the package is installed correctly."
-        )
+for path in _LIB_PATH:
+    if path.exists():
+        _ = load_module(str(path))
+        _lib_path_str = str(path)
+if _lib_path_str is None:
+    raise RuntimeError(
+        f"Could not find libtvm_ffi_orcjit.{_LIB_EXT}. "
+        f"Searched in {_LIB_PATH} and site-packages. "
+        f"Please ensure the package is installed correctly."
+    )
 
 # Explicitly initialize the library to register functions
 # This is needed because static initializers may not run when loaded via dlopen
