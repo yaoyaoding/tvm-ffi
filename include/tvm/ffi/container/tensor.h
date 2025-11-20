@@ -350,6 +350,55 @@ class Tensor : public ObjectRef {
   bool IsAligned(size_t alignment) const { return tvm::ffi::IsAligned(*get(), alignment); }
   /*!
    * \brief Create a Tensor from a NDAllocator.
+   *
+   * \note When building a kernel library, we always recommend use FromEnvAlloc when possible to
+   * allocate intermediate Tensors. When a loaded module returns an allocated tensor to the caller,
+   * we need to keep the module alive before the returned tensors get freed, because its
+   * deleter is defined within the module. FromNDAlloc can be used by C++ applications and runtimes
+   * to create Tensors.
+   *
+   * Example usage:
+   * \code
+   * // CPU Allocator
+   * struct CPUNDAlloc {
+   *   void AllocData(DLTensor* tensor) { tensor->data = malloc(ffi::GetDataSize(*tensor)); }
+   *   void FreeData(DLTensor* tensor) { free(tensor->data); }
+   * };
+   *
+   * // CUDA Allocator
+   * struct CUDANDAlloc {
+   *   void AllocData(DLTensor* tensor) {
+   *     size_t data_size = ffi::GetDataSize(*tensor);
+   *     void* ptr = nullptr;
+   *     cudaError_t err = cudaMalloc(&ptr, data_size);
+   *     TVM_FFI_ICHECK_EQ(err, cudaSuccess) << "cudaMalloc failed: " << cudaGetErrorString(err);
+   *     tensor->data = ptr;
+   *   }
+   *   void FreeData(DLTensor* tensor) {
+   *     if (tensor->data != nullptr) {
+   *       cudaError_t err = cudaFree(tensor->data);
+   *       TVM_FFI_ICHECK_EQ(err, cudaSuccess) << "cudaFree failed: " << cudaGetErrorString(err);
+   *       tensor->data = nullptr;
+   *     }
+   *   }
+   * };
+   *
+   *   // NVSHMEM Allocator
+   *   struct NVSHMEMNDAlloc {
+   *     void AllocData(DLTensor* tensor) {
+   *       size_t size = tvm::ffi::GetDataSize(*tensor);
+   *       tensor->data = nvshmem_malloc(size);
+   *       TVM_FFI_ICHECK_NE(tensor->data, nullptr) << "nvshmem_malloc failed. size: " << size;
+   *     }
+   *     void FreeData(DLTensor* tensor) { nvshmem_free(tensor->data); }
+   *   };
+   *
+   *   // Allocator usage
+   *   ffi::Tensor cpu_tensor = ffi::Tensor::FromNDAlloc(CPUNDAlloc(), ...);
+   *   ffi::Tensor cuda_tensor = ffi::Tensor::FromNDAlloc(CUDANDAlloc(), ...);
+   *   ffi::Tensor nvshmem_tensor = ffi::Tensor::FromNDAlloc(NVSHMEMNDAlloc(), ...);
+   * \endcode
+   *
    * \param alloc The NDAllocator.
    * \param shape The shape of the Tensor.
    * \param dtype The data type of the Tensor.
