@@ -353,6 +353,23 @@ def build_ninja(build_dir: str) -> None:
         raise RuntimeError("\n".join(msg))
 
 
+# Translation table for escaping C++ string literals
+_CPP_ESCAPE_TABLE = str.maketrans(
+    {
+        "\\": "\\\\",
+        '"': '\\"',
+        "\n": "\\n",
+        "\r": "\\r",
+        "\t": "\\t",
+    }
+)
+
+
+def _escape_cpp_string_literal(s: str) -> str:
+    """Escape special characters for C++ string literals."""
+    return s.translate(_CPP_ESCAPE_TABLE)
+
+
 def _decorate_with_tvm_ffi(source: str, functions: Mapping[str, str]) -> str:
     """Decorate the given source code with TVM FFI export macros."""
     sources = [
@@ -367,7 +384,11 @@ def _decorate_with_tvm_ffi(source: str, functions: Mapping[str, str]) -> str:
 
     for func_name, func_doc in functions.items():
         sources.append(f"TVM_FFI_DLL_EXPORT_TYPED_FUNC({func_name}, {func_name});")
-        _ = func_doc  # todo: add support to embed function docstring to the tvm ffi functions.
+
+        if func_doc:
+            # Escape the docstring for C++ string literal
+            escaped_doc = _escape_cpp_string_literal(func_doc)
+            sources.append(f'TVM_FFI_DLL_EXPORT_TYPED_FUNC_DOC({func_name}, "{escaped_doc}");')
 
     sources.append("")
 
@@ -496,11 +517,12 @@ def build_inline(
         The CUDA source code. It can be a list of sources or a single source.
     functions
         The functions in cpp_sources or cuda_source that will be exported to the tvm ffi module. When a mapping is
-        given, the keys are the names of the exported functions, and the values are docstrings for the functions. When
-        a sequence or a single string is given, they are the functions needed to be exported, and the docstrings are set
-        to empty strings. A single function name can also be given as a string. When cpp_sources is given, the functions
-        must be declared (not necessarily defined) in the cpp_sources. When cpp_sources is not given, the functions
-        must be defined in the cuda_sources. If not specified, no function will be exported.
+        given, the keys are the names of the exported functions, and the values are docstrings for the functions
+        (use an empty string to skip documentation for specific functions). When a sequence or a single string is given, they are
+        the functions needed to be exported, and the docstrings are set to empty strings. A single function name can
+        also be given as a string. When cpp_sources is given, the functions must be declared (not necessarily defined)
+        in the cpp_sources. When cpp_sources is not given, the functions must be defined in the cuda_sources. If not
+        specified, no function will be exported.
     extra_cflags
         The extra compiler flags for C++ compilation.
         The default flags are:
@@ -604,7 +626,6 @@ def build_inline(
     else:
         cpp_source = _decorate_with_tvm_ffi(cpp_source, {})
         cuda_source = _decorate_with_tvm_ffi(cuda_source, function_map)
-
     # determine the cache dir for the built module
     build_dir: Path
     if build_directory is None:
@@ -694,11 +715,12 @@ def load_inline(
         The CUDA source code. It can be a list of sources or a single source.
     functions: Mapping[str, str] | Sequence[str] | str, optional
         The functions in cpp_sources or cuda_source that will be exported to the tvm ffi module. When a mapping is
-        given, the keys are the names of the exported functions, and the values are docstrings for the functions. When
-        a sequence or a single string is given, they are the functions needed to be exported, and the docstrings are set
-        to empty strings. A single function name can also be given as a string. When cpp_sources is given, the functions
-        must be declared (not necessarily defined) in the cpp_sources. When cpp_sources is not given, the functions
-        must be defined in the cuda_sources. If not specified, no function will be exported.
+        given, the keys are the names of the exported functions, and the values are docstrings for the functions
+        (use an empty string to skip documentation for specific functions). When a sequence or a single string is given, they are
+        the functions needed to be exported, and the docstrings are set to empty strings. A single function name can
+        also be given as a string. When cpp_sources is given, the functions must be declared (not necessarily defined)
+        in the cpp_sources. When cpp_sources is not given, the functions must be defined in the cuda_sources. If not
+        specified, no function will be exported.
     extra_cflags: Sequence[str], optional
         The extra compiler flags for C++ compilation.
         The default flags are:
