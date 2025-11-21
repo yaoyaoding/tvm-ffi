@@ -33,7 +33,7 @@
  *
  * // Load CUBIN module (once, static)
  * static tvm::ffi::CubinModule mod(__cubin_data, __cubin_size);
- * 
+ *
  * // Get kernel (once, static)
  * static tvm::ffi::CubinKernel kernel = mod["my_kernel"];
  *
@@ -51,10 +51,9 @@
 #ifndef TVM_FFI_EXTRA_CUBIN_LAUNCHER_H_
 #define TVM_FFI_EXTRA_CUBIN_LAUNCHER_H_
 
+#include <cuda.h>
 #include <tvm/ffi/error.h>
 #include <tvm/ffi/extra/c_env_api.h>
-
-#include <cuda.h>
 
 #include <cstdint>
 #include <cstring>
@@ -67,25 +66,26 @@ namespace ffi {
 
 /*!
  * \brief Macro for checking CUDA driver API errors.
- * 
+ *
  * This macro checks the return value of CUDA driver API calls and throws
  * a RuntimeError with detailed error information if the call fails.
  *
  * \param stmt The CUDA driver API call to check.
  */
-#define TVM_FFI_CHECK_CUDA_DRIVER_ERROR(stmt)                                              \
-  do {                                                                                     \
-    CUresult __err = (stmt);                                                               \
-    if (__err != CUDA_SUCCESS) {                                                           \
-      const char* __err_name = nullptr;                                                    \
-      const char* __err_str = nullptr;                                                     \
-      cuGetErrorName(__err, &__err_name);                                                  \
-      cuGetErrorString(__err, &__err_str);                                                 \
-      TVM_FFI_THROW(RuntimeError)                                                          \
-          << "CUDA Driver Error: " << (__err_name ? __err_name : "UNKNOWN") << " ("       \
-          << static_cast<int>(__err) << "): " << (__err_str ? __err_str : "No description") \
-          << " at " << __FILE__ << ":" << __LINE__;                                        \
-    }                                                                                      \
+#define TVM_FFI_CHECK_CUDA_DRIVER_ERROR(stmt)                                                      \
+  do {                                                                                             \
+    CUresult __err = (stmt);                                                                       \
+    if (__err != CUDA_SUCCESS) {                                                                   \
+      const char* __err_name = nullptr;                                                            \
+      const char* __err_str = nullptr;                                                             \
+      cuGetErrorName(__err, &__err_name);                                                          \
+      cuGetErrorString(__err, &__err_str);                                                         \
+      TVM_FFI_THROW(RuntimeError) << "CUDA Driver Error: "                                         \
+                                  << (__err_name ? __err_name : "UNKNOWN") << " ("                 \
+                                  << static_cast<int>(__err)                                       \
+                                  << "): " << (__err_str ? __err_str : "No description") << " at " \
+                                  << __FILE__ << ":" << __LINE__;                                  \
+    }                                                                                              \
   } while (0)
 
 /*!
@@ -124,7 +124,7 @@ class CubinModule {
  public:
   /*!
    * \brief Load CUBIN module from memory.
-   * 
+   *
    * \param data Pointer to CUBIN binary data in memory.
    * \param size Size of the CUBIN binary data in bytes.
    * \note Calls cuInit(0) to ensure CUDA is initialized.
@@ -137,7 +137,7 @@ class CubinModule {
 
   /*!
    * \brief Load CUBIN module from file.
-   * 
+   *
    * \param filename Path to the CUBIN file.
    * \note This reads the entire file into memory and then loads it.
    */
@@ -159,7 +159,7 @@ class CubinModule {
     }
 
     TVM_FFI_CHECK_CUDA_DRIVER_ERROR(cuLibraryLoadData(&library_, data_buffer_.data(), nullptr,
-                                                       nullptr, 0, nullptr, nullptr, 0));
+                                                      nullptr, 0, nullptr, nullptr, 0));
   }
 
   /*! \brief Destructor unloads the library */
@@ -171,7 +171,7 @@ class CubinModule {
 
   /*!
    * \brief Get a kernel function from the module by name.
-   * 
+   *
    * \param name Name of the kernel function.
    * \return CubinKernel object representing the loaded kernel.
    */
@@ -179,7 +179,7 @@ class CubinModule {
 
   /*!
    * \brief Operator[] for convenient kernel access.
-   * 
+   *
    * \param name Name of the kernel function.
    * \return CubinKernel object representing the loaded kernel.
    */
@@ -193,7 +193,8 @@ class CubinModule {
   CubinModule& operator=(const CubinModule&) = delete;
 
   // Movable
-  CubinModule(CubinModule&& other) noexcept : library_(other.library_), data_buffer_(std::move(other.data_buffer_)) {
+  CubinModule(CubinModule&& other) noexcept
+      : library_(other.library_), data_buffer_(std::move(other.data_buffer_)) {
     other.library_ = nullptr;
   }
 
@@ -224,7 +225,7 @@ class CubinKernel {
  public:
   /*!
    * \brief Construct a CubinKernel from a library and kernel name.
-   * 
+   *
    * \param library The CUlibrary handle.
    * \param name Name of the kernel function.
    */
@@ -237,9 +238,9 @@ class CubinKernel {
 
   /*!
    * \brief Launch the kernel with specified parameters.
-   * 
+   *
    * This function launches the kernel on the current CUDA context/device.
-   * 
+   *
    * \param args Array of pointers to kernel arguments.
    * \param grid Grid dimensions (number of blocks).
    * \param block Block dimensions (threads per block).
@@ -257,7 +258,7 @@ class CubinKernel {
     }
 
     return cuLaunchKernel(function, grid.x, grid.y, grid.z, block.x, block.y, block.z,
-                         dyn_smem_bytes, stream, args, nullptr);
+                          dyn_smem_bytes, stream, args, nullptr);
   }
 
   /*! \brief Get the underlying CUkernel handle */
@@ -268,9 +269,7 @@ class CubinKernel {
   CubinKernel& operator=(const CubinKernel&) = delete;
 
   // Movable
-  CubinKernel(CubinKernel&& other) noexcept : kernel_(other.kernel_) {
-    other.kernel_ = nullptr;
-  }
+  CubinKernel(CubinKernel&& other) noexcept : kernel_(other.kernel_) { other.kernel_ = nullptr; }
 
   CubinKernel& operator=(CubinKernel&& other) noexcept {
     if (this != &other) {
@@ -285,13 +284,9 @@ class CubinKernel {
 };
 
 // Implementation of CubinModule methods that return CubinKernel
-inline CubinKernel CubinModule::GetKernel(const char* name) {
-  return CubinKernel(library_, name);
-}
+inline CubinKernel CubinModule::GetKernel(const char* name) { return CubinKernel(library_, name); }
 
-inline CubinKernel CubinModule::operator[](const char* name) {
-  return GetKernel(name);
-}
+inline CubinKernel CubinModule::operator[](const char* name) { return GetKernel(name); }
 
 }  // namespace ffi
 }  // namespace tvm
