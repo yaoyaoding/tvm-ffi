@@ -73,7 +73,12 @@ namespace ffi {
  * with the CUDA Driver API. It can be constructed from 1, 2, or 3 dimensions.
  */
 struct dim3 {
-  unsigned int x, y, z;
+  /*! \brief X dimension (number of blocks in x-direction or threads in x-direction) */
+  unsigned int x;
+  /*! \brief Y dimension (number of blocks in y-direction or threads in y-direction) */
+  unsigned int y;
+  /*! \brief Z dimension (number of blocks in z-direction or threads in z-direction) */
+  unsigned int z;
 
   /*! \brief Default constructor initializes to (1, 1, 1) */
   dim3() : x(1), y(1), z(1) {}
@@ -170,12 +175,27 @@ class CubinModule {
   CubinModule(const CubinModule&) = delete;
   CubinModule& operator=(const CubinModule&) = delete;
 
-  // Movable
+  /*!
+   * \brief Move constructor for CubinModule.
+   *
+   * Transfers ownership of the CUDA library handle from another CubinModule instance.
+   *
+   * \param other The source CubinModule to move from (will be left in an empty state).
+   */
   CubinModule(CubinModule&& other) noexcept
       : library_(other.library_), data_buffer_(std::move(other.data_buffer_)) {
     other.library_ = nullptr;
   }
 
+  /*!
+   * \brief Move assignment operator for CubinModule.
+   *
+   * Transfers ownership of the CUDA library handle from another CubinModule instance.
+   * Cleans up any existing library handle in this instance before taking ownership.
+   *
+   * \param other The source CubinModule to move from (will be left in an empty state).
+   * \return Reference to this CubinModule.
+   */
   CubinModule& operator=(CubinModule&& other) noexcept {
     if (this != &other) {
       if (library_ != nullptr) {
@@ -246,9 +266,23 @@ class CubinKernel {
   CubinKernel(const CubinKernel&) = delete;
   CubinKernel& operator=(const CubinKernel&) = delete;
 
-  // Movable
+  /*!
+   * \brief Move constructor for CubinKernel.
+   *
+   * Transfers ownership of the CUDA kernel handle from another CubinKernel instance.
+   *
+   * \param other The source CubinKernel to move from (will be left in an empty state).
+   */
   CubinKernel(CubinKernel&& other) noexcept : kernel_(other.kernel_) { other.kernel_ = nullptr; }
 
+  /*!
+   * \brief Move assignment operator for CubinKernel.
+   *
+   * Transfers ownership of the CUDA kernel handle from another CubinKernel instance.
+   *
+   * \param other The source CubinKernel to move from (will be left in an empty state).
+   * \return Reference to this CubinKernel.
+   */
   CubinKernel& operator=(CubinKernel&& other) noexcept {
     if (this != &other) {
       kernel_ = other.kernel_;
