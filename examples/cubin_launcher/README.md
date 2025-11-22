@@ -68,8 +68,6 @@ python examples/cubin_launcher/example_file_cubin.py
 python examples/cubin_launcher/example_triton_cubin.py
 ```
 
-**Note:** This example is still under exploration. Triton kernels use a different ABI than standard CUDA kernels (5 parameters including hidden metadata), requiring special handling for direct CUDA Driver API calls.
-
 ## Files
 
 - `include/tvm/ffi/extra/cubin_launcher.h` - Header-only C++ library
