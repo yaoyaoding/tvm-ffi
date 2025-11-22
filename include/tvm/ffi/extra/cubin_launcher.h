@@ -25,28 +25,6 @@
  * - Loading CUBIN from memory (embedded data) or files
  * - Multi-GPU execution using CUDA primary contexts
  * - Kernel parameter management and launch configuration
- *
- * Example usage:
- * \code
- * extern "C" const char __cubin_data[];
- * extern "C" const uint64_t __cubin_size;
- *
- * // Load CUBIN module (once, static)
- * static tvm::ffi::CubinModule mod(__cubin_data, __cubin_size);
- *
- * // Get kernel (once, static)
- * static tvm::ffi::CubinKernel kernel = mod["my_kernel"];
- *
- * // Prepare arguments
- * void* args[] = {&ptr1, &ptr2, &n};
- *
- * // Launch kernel
- * tvm::ffi::dim3 grid(blocks);
- * tvm::ffi::dim3 block(threads);
- * CUstream stream = (CUstream)TVMFFIEnvGetStream(kDLCUDA, device_id);
- * CUresult result = kernel.Launch(args, grid, block, stream);
- * TVM_FFI_CHECK_CUDA_DRIVER_ERROR(result);
- * \endcode
  */
 #ifndef TVM_FFI_EXTRA_CUBIN_LAUNCHER_H_
 #define TVM_FFI_EXTRA_CUBIN_LAUNCHER_H_
