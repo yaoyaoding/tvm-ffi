@@ -31,6 +31,7 @@
 #include <tvm/ffi/function.h>
 
 #include <cstdint>
+#include <memory>
 
 // External symbols for embedded CUBIN data (linked via objcopy)
 extern "C" const char __cubin_data[];
@@ -41,16 +42,16 @@ static const uint64_t cubin_data_size =
     reinterpret_cast<const char*>(&__cubin_data_end) - reinterpret_cast<const char*>(&__cubin_data);
 
 // Global CUBIN module and kernels (initialized on first use)
-static tvm::ffi::CubinModule* g_cubin_module = nullptr;
-static tvm::ffi::CubinKernel* g_add_one_kernel = nullptr;
-static tvm::ffi::CubinKernel* g_mul_two_kernel = nullptr;
+static std::unique_ptr<tvm::ffi::CubinModule> g_cubin_module;
+static std::unique_ptr<tvm::ffi::CubinKernel> g_add_one_kernel;
+static std::unique_ptr<tvm::ffi::CubinKernel> g_mul_two_kernel;
 
 // Initialize the CUBIN module and kernels
 void InitializeCubinModule() {
   if (g_cubin_module == nullptr) {
-    g_cubin_module = new tvm::ffi::CubinModule(__cubin_data, cubin_data_size);
-    g_add_one_kernel = new tvm::ffi::CubinKernel((*g_cubin_module)["add_one_cuda"]);
-    g_mul_two_kernel = new tvm::ffi::CubinKernel((*g_cubin_module)["mul_two_cuda"]);
+    g_cubin_module = std::make_unique<tvm::ffi::CubinModule>(__cubin_data, cubin_data_size);
+    g_add_one_kernel = std::make_unique<tvm::ffi::CubinKernel>((*g_cubin_module)["add_one_cuda"]);
+    g_mul_two_kernel = std::make_unique<tvm::ffi::CubinKernel>((*g_cubin_module)["mul_two_cuda"]);
   }
 }
 

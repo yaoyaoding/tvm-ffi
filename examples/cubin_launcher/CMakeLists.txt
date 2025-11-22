@@ -85,6 +85,12 @@ set_target_properties(
              SUFFIX ".so"
 )
 
+# Mark the embedded object file's stack as non-executable. This is necessary because the object file
+# created by 'ld -r -b binary' does not include a .note.GNU-stack section, which causes the linker
+# to warn about an executable stack. The -z,noexecstack flag ensures compatibility with security
+# policies and future linker versions that will enforce non-executable stacks by default.
+target_link_options(lib_embedded PRIVATE "LINKER:-z,noexecstack")
+
 # Step 4: Build lib_dynamic shared library (loads CUBIN from file)
 add_library(lib_dynamic SHARED src/lib_dynamic.cc)
 target_link_libraries(
