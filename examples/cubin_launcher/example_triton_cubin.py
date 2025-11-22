@@ -50,12 +50,7 @@ def _compile_triton_to_cubin() -> tuple[bytes, str]:
 
     # Define the kernel dynamically
     @triton.jit
-    def square_kernel(
-        X_ptr: int,
-        Y_ptr: int,
-        n: int,
-        BLOCK: tl.constexpr = 1024,  # type: ignore[name-defined]
-    ) -> None:
+    def square_kernel(X_ptr, Y_ptr, n, BLOCK: tl.constexpr = 1024):  # noqa
         pid = tl.program_id(0)
         start = pid * BLOCK
         offsets = start + tl.arange(0, BLOCK)
@@ -151,15 +146,17 @@ void LaunchSquare(tvm::ffi::TensorView x, tvm::ffi::TensorView y) {
   TVM_FFI_CHECK(y.ndim() == 1, ValueError) << "Output must be 1D tensor";
   TVM_FFI_CHECK(x.size(0) == y.size(0), ValueError) << "Sizes must match";
 
-  int64_t n = x.size(0);
+  uint32_t n = static_cast<uint32_t>(x.size(0));
   void* x_ptr = x.data_ptr();
   void* y_ptr = y.data_ptr();
+  uint64_t dummy_ptr = 0;
 
-  void* args[] = {reinterpret_cast<void*>(&x_ptr), reinterpret_cast<void*>(&y_ptr),
-                  reinterpret_cast<void*>(&n)};
+  // Workaround for Triton extra params: pass dummy addresses for unused parameters
+  void* args[] = {&x_ptr, &y_ptr, &n, &dummy_ptr, &dummy_ptr};
 
-  tvm::ffi::dim3 grid((n + 1023) / 1024);
-  tvm::ffi::dim3 block(1024);
+  // Kernel was compiled with .reqntid 128, not 1024
+  tvm::ffi::dim3 grid((n + 127) / 128);
+  tvm::ffi::dim3 block(128);
 
   DLDevice device = x.device();
   CUstream stream = static_cast<CUstream>(TVMFFIEnvGetStream(device.device_type, device.device_id));
