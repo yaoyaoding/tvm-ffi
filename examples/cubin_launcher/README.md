@@ -48,7 +48,7 @@ cd build
 cmake ..
 make
 cd ..
-python examples/cubin_launcher/example_embeded_cubin.py
+python examples/cubin_launcher/example_embedded_cubin.py
 ```
 
 ### 2. Dynamic CUBIN Loading (TVM-FFI Library)
