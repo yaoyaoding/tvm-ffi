@@ -210,7 +210,7 @@ if (TVM_FFI_BUILD_PYTHON_MODULE)
   message(STATUS "Building cython module..")
 
   # prefer virtualenv when searching for python
-  set(Python_FIND_VIRTUALENV FIRST)
+  set(Python_FIND_VIRTUALENV FIRST) # cmake-lint: disable=C0103
 
   find_package(
     Python

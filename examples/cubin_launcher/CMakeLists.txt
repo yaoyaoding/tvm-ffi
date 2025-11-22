@@ -44,7 +44,11 @@ add_custom_command(
   COMMENT "Compiling kernel.cu to CUBIN for native GPU architecture"
 )
 
-add_custom_target(generate_cubin ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/kernel.cubin)
+add_custom_target(
+  generate_cubin ALL
+  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/kernel.cubin
+  COMMENT "Generating CUBIN file"
+)
 
 # Step 2: Generate object file with embedded CUBIN data for linking This creates symbols:
 # __cubin_data, __cubin_size
@@ -62,7 +66,11 @@ add_custom_command(
   COMMENT "Embedding CUBIN as object file"
 )
 
-add_custom_target(embed_cubin DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/kernel_cubin_data.o)
+add_custom_target(
+  embed_cubin
+  DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/kernel_cubin_data.o
+  COMMENT "Embedding CUBIN as object file"
+)
 
 # Step 3: Build lib_embedded shared library (with embedded CUBIN)
 add_library(lib_embedded SHARED src/lib_embedded.cc ${CMAKE_CURRENT_BINARY_DIR}/kernel_cubin_data.o)

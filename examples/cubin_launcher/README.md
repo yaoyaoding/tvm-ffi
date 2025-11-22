@@ -1,174 +1,79 @@
-# CUBIN Launcher Example
+<!--- Licensed to the Apache Software Foundation (ASF) under one -->
+<!--- or more contributor license agreements.  See the NOTICE file -->
+<!--- distributed with this work for additional information -->
+<!--- regarding copyright ownership.  The ASF licenses this file -->
+<!--- to you under the Apache License, Version 2.0 (the -->
+<!--- "License"); you may not use this file except in compliance -->
+<!--- with the License.  You may obtain a copy of the License at -->
 
-This example demonstrates how to use the `tvm::ffi::CubinModule` and `tvm::ffi::CubinKernel` classes to load and execute CUDA kernels from CUBIN files.
+<!---   http://www.apache.org/licenses/LICENSE-2.0 -->
+
+<!--- Unless required by applicable law or agreed to in writing, -->
+<!--- software distributed under the License is distributed on an -->
+<!--- "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY -->
+<!--- KIND, either express or implied.  See the License for the -->
+<!--- specific language governing permissions and limitations -->
+<!--- under the License. -->
+
+# CUBIN Launcher
 
 ## Overview
 
-The `cubin_launcher.h` header provides a lightweight C++ wrapper around CUDA Driver API for:
-- Loading CUBIN modules from memory or files
-- Managing kernel functions
-- Launching kernels with specified configurations
-- Multi-GPU support using CUDA primary contexts
+Demonstrates loading and executing CUDA kernels from CUBIN files using TVM-FFI. The `cubin_launcher.h` header wraps CUDA Driver API to provide lightweight CUBIN module and kernel management.
+
+## Techniques
+
+The implementation uses CUDA Driver API Library Management:
+
+- **`cuLibraryLoadData()`** - Load CUBIN from memory buffer
+- **`cuLibraryGetKernel()`** - Get kernel handle by name
+- **`cuKernelGetFunction()`** - Get function handle for current CUDA context
+- **`cuLaunchKernel()`** - Launch kernel with grid/block dimensions
+
+Key features:
+
+- Multi-GPU support via CUDA primary contexts
+- RAII-based resource management (CubinModule, CubinKernel)
+- CUBIN embedding at compile time (via `ld` + `objcopy`)
+- TVM-FFI integration for tensor argument passing
+
+## Examples
+
+### 1. Embedded CUBIN (TVM-FFI Library)
+
+`example_embeded_cubin.py` - CUBIN linked into shared library at build time.
+
+```bash
+cd build
+cmake ..
+make
+cd ..
+python examples/cubin_launcher/example_embeded_cubin.py
+```
+
+### 2. Dynamic CUBIN Loading (TVM-FFI Library)
+
+`example_file_cubin.py` - CUBIN loaded from file at runtime.
+
+```bash
+python examples/cubin_launcher/example_file_cubin.py
+```
+
+### 3. Triton Kernel (Experimental)
+
+`example_triton_cubin.py` - Triton kernel compiled to CUBIN, with C++ wrapper via `tvm_ffi.cpp.load_inline`.
+
+```bash
+# Requires: triton, torch
+python examples/cubin_launcher/example_triton_cubin.py
+```
+
+**Note:** This example is still under exploration. Triton kernels use a different ABI than standard CUDA kernels (5 parameters including hidden metadata), requiring special handling for direct CUDA Driver API calls.
 
 ## Files
 
-- `src/kernel.cu` - Simple CUDA kernels (`add_one_cuda`, `mul_two_cuda`)
-- `src/main_embedded.cc` - Example using embedded CUBIN data (linked at compile time)
-- `src/main_dynamic.cc` - Example loading CUBIN from file at runtime
+- `include/tvm/ffi/extra/cubin_launcher.h` - Header-only C++ library
+- `src/lib_embedded.cc` - Embedded CUBIN example (lib_embedded.so)
+- `src/lib_dynamic.cc` - Dynamic loading example (lib_dynamic.so)
+- `src/kernel.cu` - CUDA kernels (add_one, mul_two)
 - `CMakeLists.txt` - Build configuration
-
-## Building
-
-### Prerequisites
-
-- CUDA Toolkit (with driver API support)
-- CMake 3.20+
-- TVM-FFI installed (`pip install tvm-ffi`)
-
-### Build Commands
-
-```bash
-# Configure the build
-mkdir build && cd build
-cmake ..
-
-# Build the examples
-make
-
-# This will generate:
-# - kernel.cubin (the compiled CUDA kernel)
-# - main_embedded (executable with embedded CUBIN)
-# - main_dynamic (executable that loads CUBIN from file)
-```
-
-## Running
-
-### Embedded Example
-
-The embedded example links the CUBIN data directly into the executable:
-
-```bash
-./main_embedded
-```
-
-**Output:**
-```
-=== Testing add_one_cuda kernel with embedded CUBIN ===
-CUBIN size: XXXX bytes
-CUBIN module loaded successfully
-Kernel 'add_one_cuda' loaded successfully
-Launching kernel with grid(4) block(256)
-Kernel launched successfully
-✓ Verification passed! All 1024 elements computed correctly.
-
-=== Testing mul_two_cuda kernel with embedded CUBIN ===
-...
-```
-
-### Dynamic Example
-
-The dynamic example loads the CUBIN file at runtime:
-
-```bash
-./main_dynamic
-# Or specify CUBIN path:
-./main_dynamic kernel.cubin
-```
-
-**Output:**
-```
-CUBIN Launcher Dynamic Loading Example
-=======================================
-
-=== Testing CUBIN loading from file ===
-Loading CUBIN from: kernel.cubin
-CUBIN module loaded successfully
-...
-✓ All tests passed!
-```
-
-## API Usage
-
-### Basic Usage Pattern
-
-```cpp
-#include <tvm/ffi/extra/cubin_launcher.h>
-
-// Load CUBIN from memory
-extern "C" const char cubin_data[];
-extern "C" const uint64_t cubin_size;
-tvm::ffi::CubinModule mod(cubin_data, cubin_size);
-
-// Or load from file
-tvm::ffi::CubinModule mod("kernel.cubin");
-
-// Get kernel
-tvm::ffi::CubinKernel kernel = mod["kernel_name"];
-
-// Prepare arguments
-void* args[] = {&ptr1, &ptr2, &n};
-
-// Launch configuration
-tvm::ffi::dim3 grid(blocks);
-tvm::ffi::dim3 block(threads);
-
-// Get CUDA stream
-CUstream stream = (CUstream)TVMFFIEnvGetStream(kDLCUDA, device_id);
-
-// Launch kernel
-CUresult result = kernel.Launch(args, grid, block, stream);
-TVM_FFI_CHECK_CUDA_DRIVER_ERROR(result);
-```
-
-### Error Handling
-
-Use the `TVM_FFI_CHECK_CUDA_DRIVER_ERROR` macro for checking CUDA Driver API results:
-
-```cpp
-CUresult result = kernel.Launch(args, grid, block, stream);
-TVM_FFI_CHECK_CUDA_DRIVER_ERROR(result);
-// Throws RuntimeError with detailed message if result != CUDA_SUCCESS
-```
-
-### Multi-GPU Support
-
-The launcher uses CUDA primary contexts and supports multi-GPU execution:
-
-```cpp
-// Each device has its own context
-// The kernel will execute on the current device context
-CUstream stream = (CUstream)TVMFFIEnvGetStream(kDLCUDA, device_id);
-kernel.Launch(args, grid, block, stream);
-```
-
-## Implementation Details
-
-### CUBIN Embedding
-
-The CMakeLists.txt uses `ld` and `objcopy` to embed the CUBIN binary:
-
-1. Compile `kernel.cu` to CUBIN
-2. Use `ld -r -b binary` to create an object file
-3. Use `objcopy` to rename symbols (`_binary_*` → `__cubin_data`)
-4. Link the object file into the final executable
-
-### CUDA Driver API
-
-The implementation uses:
-- `cuLibraryLoadData` - Load CUBIN from memory
-- `cuLibraryGetKernel` - Get kernel handle from library
-- `cuKernelGetFunction` - Get function handle for current context
-- `cuLaunchKernel` - Launch the kernel
-
-## Notes
-
-- The `CubinModule` and `CubinKernel` classes are movable but not copyable (RAII)
-- `cuInit(0)` is called automatically in `CubinModule` constructor
-- Kernel handles are context-independent; function handles are context-specific
-- Static initialization is recommended for module/kernel loading (load once, use many times)
-
-## See Also
-
-- [CUDA Driver API Documentation](https://docs.nvidia.com/cuda/cuda-driver-api/)
-- [Library Management API](https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__LIBRARY.html)
-- TVM-FFI documentation
