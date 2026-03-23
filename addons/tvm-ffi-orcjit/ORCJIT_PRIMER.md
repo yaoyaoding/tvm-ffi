@@ -283,15 +283,25 @@ On Windows, `tvm-ffi-orcjit` adds a custom `DLLImportDefinitionGenerator` that h
 
 ### 3.4 Platform Support
 
-ORC has platform-specific support objects that mirror the OS loader:
+ORC has platform-specific support objects that mirror the OS loader's initialization
+responsibilities: `MachOPlatform` handles `__mod_init_func` and `__cxa_atexit` on
+macOS, while `ELFNativePlatform` and `COFFPlatform` serve analogous roles on Linux
+and Windows. These platforms work in concert with the ORC runtime library (a small
+compiler-rt component compiled for the target).
 
-- **`MachOPlatform`**: registers JIT dylibs with the Objective-C runtime, handles
-  `__mod_init_func` / `__cxa_atexit` via the ORC runtime (`liborc_rt`).
-- **`ELFNativePlatform`**: similar for ELF TLS and init sections.
+`tvm-ffi-orcjit` takes a different approach on each platform:
 
-`tvm-ffi-orcjit` **does not use ORC platforms on Linux/Windows** to avoid the
-`liborc_rt` dependency. Instead, it manually collects and runs init/fini pointers via
-the `InitFiniPlugin`.
+- **macOS**: ORC platform support is *optional*. When the caller passes an ORC runtime
+  path, `ExecutorNativePlatform` activates `MachOPlatform`, which natively handles
+  `__mod_init_func` / `__cxa_atexit`. Without the path, the addon falls back to its
+  own `InitFiniPlugin`.
+- **Windows**: `COFFPlatform` is skipped entirely because it requires MSVC CRT symbols
+  (`_CxxThrowException`, RTTI vtables, iostream objects) that are not resolvable in
+  the JIT context. Instead, `InitFiniPlugin` manually handles `.CRT$XC*` / `.CRT$XT*`
+  init/fini sections.
+- **Linux**: LLJIT already defaults to `ObjectLinkingLayer` for ELF, and `InitFiniPlugin`
+  handles `.init_array` / `.fini_array` / `.ctors` / `.dtors` directly, without
+  involving `ELFNativePlatform`.
 
 ---
 
