@@ -173,6 +173,8 @@ Compile: `clang -O2 -c -o example.o example.c`
   relocations from COFF objects before JITLink graph building, working around a
   JITLink limitation with COMDAT section symbols.
 
+Please refers to [ORCJIT_PRIMER.md](./ORCJIT_PRIMER.md) to learn more about object file, linking, llvm orcjit v2, and how the addon works.
+
 ## Project Structure
 
 ```text
