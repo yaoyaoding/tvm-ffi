@@ -283,25 +283,56 @@ On Windows, `tvm-ffi-orcjit` adds a custom `DLLImportDefinitionGenerator` that h
 
 ### 3.4 Platform Support
 
-ORC has platform-specific support objects that mirror the OS loader's initialization
-responsibilities: `MachOPlatform` handles `__mod_init_func` and `__cxa_atexit` on
-macOS, while `ELFNativePlatform` and `COFFPlatform` serve analogous roles on Linux
-and Windows. These platforms work in concert with the ORC runtime library (a small
-compiler-rt component compiled for the target).
+#### What an ORC Platform Is
 
-`tvm-ffi-orcjit` takes a different approach on each platform:
+When the OS dynamic linker loads a shared library, it does more than just map bytes
+into memory — it runs constructors, registers `atexit` handlers, and sets up
+thread-local storage. An **ORC platform** is the JIT-side object that replicates this
+OS loader behavior for JIT-linked code.
+
+Concretely, an ORC platform:
+
+1. **Intercepts `__cxa_atexit`**: C++ objects with destructors register their cleanup
+   via `__cxa_atexit`. The platform installs an interposer so these registrations are
+   scoped to a `JITDylib` and can be drained when that dylib is torn down — instead of
+   running at process exit like normal.
+2. **Drives initialization**: After an object file is linked into a `JITDylib`, calling
+   `jit_->initialize(dylib)` asks the platform to run constructors (e.g., iterate
+   `__mod_init_func` on macOS, `.init_array` on ELF).
+3. **Drives deinitialization**: `jit_->deinitialize(dylib)` drains the `atexit`
+   handlers registered during step 2 and runs destructors.
+
+This requires a small **ORC runtime library** (part of LLVM's `compiler-rt`) to be
+compiled for the target and loaded into the JIT — it provides the actual
+`__cxa_atexit` interposer and initialization trampolines that the platform object
+coordinates with.
+
+The three platform objects in LLVM are:
+
+| Platform | OS | Init section driven |
+| --- | --- | --- |
+| `MachOPlatform` | macOS / iOS | `__DATA,__mod_init_func` |
+| `ELFNativePlatform` | Linux / ELF | `.init_array`, TLS |
+| `COFFPlatform` | Windows | `.CRT$XC*` init, `__cxa_atexit` interop |
+
+`ExecutorNativePlatform` is a convenience builder that auto-selects the right platform
+for the host OS and loads the ORC runtime from a given path.
+
+#### How `tvm-ffi-orcjit` Uses (or Avoids) ORC Platforms
+
+The addon takes a different approach on each platform:
 
 - **macOS**: ORC platform support is *optional*. When the caller passes an ORC runtime
-  path, `ExecutorNativePlatform` activates `MachOPlatform`, which natively handles
-  `__mod_init_func` / `__cxa_atexit`. Without the path, the addon falls back to its
+  path to `ExecutionSession`, `ExecutorNativePlatform` activates `MachOPlatform`.
+  `jit_->initialize(dylib)` and `jit_->deinitialize(dylib)` then drive `__mod_init_func`
+  and `__cxa_atexit` teardown natively. Without the path, the addon falls back to its
   own `InitFiniPlugin`.
 - **Windows**: `COFFPlatform` is skipped entirely because it requires MSVC CRT symbols
   (`_CxxThrowException`, RTTI vtables, iostream objects) that are not resolvable in
   the JIT context. Instead, `InitFiniPlugin` manually handles `.CRT$XC*` / `.CRT$XT*`
   init/fini sections.
-- **Linux**: LLJIT already defaults to `ObjectLinkingLayer` for ELF, and `InitFiniPlugin`
-  handles `.init_array` / `.fini_array` / `.ctors` / `.dtors` directly, without
-  involving `ELFNativePlatform`.
+- **Linux**: `ELFNativePlatform` is not used. `InitFiniPlugin` handles `.init_array` /
+  `.fini_array` / `.ctors` / `.dtors` directly, without the ORC runtime.
 
 ---
 
@@ -502,4 +533,3 @@ TVM_FFI_DLL_EXPORT_TYPED_FUNC(add, add_impl);
 - PE/COFF specification: <https://learn.microsoft.com/en-us/windows/win32/debug/pe-format>
 - Mach-O reference: <https://developer.apple.com/documentation/kernel/mach-o_file_format_reference>
 - Ian Lance Taylor's linker series (20-part blog): foundational reading on linkers
-- `addons/tvm-ffi-orcjit/REVIEW.md`: known issues and suggestions for this addon
