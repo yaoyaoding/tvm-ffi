@@ -16,6 +16,8 @@
 # under the License.
 """Tests for __ffi_repr__ / ffi.ReprPrint."""
 
+from __future__ import annotations
+
 import ast
 import re
 
@@ -664,6 +666,107 @@ def test_repr_unregistered_object_no_duplicate_field_names() -> None:
     obj = tvm_ffi.testing.make_unregistered_object()
     result = ReprPrint(obj)
     assert result.count("v1=") == 1
+
+
+# --------------------------------------------------------------------------- #
+#  @py_class repr
+# --------------------------------------------------------------------------- #
+
+import itertools as _itertools_repr
+from typing import Optional as _Optional_repr
+
+from tvm_ffi.core import Object as _Object_repr
+from tvm_ffi.dataclasses import py_class as _py_class_repr
+
+_counter_repr = _itertools_repr.count()
+
+
+def _unique_key_repr(base: str) -> str:
+    return f"testing.repr_pc.{base}_{next(_counter_repr)}"
+
+
+def test_repr_py_class_base() -> None:
+    """Repr of a simple @py_class contains field names and values."""
+
+    @_py_class_repr(_unique_key_repr("ReprBase"))
+    class ReprBase(_Object_repr):
+        a: int
+        b: str
+
+    r = repr(ReprBase(a=1, b="hello"))
+    assert "a=1" in r or "a: 1" in r
+    assert "hello" in r
+
+
+def test_repr_py_class_derived() -> None:
+    """Repr of a derived @py_class shows all fields including parent."""
+
+    @_py_class_repr(_unique_key_repr("ReprP"))
+    class ReprP(_Object_repr):
+        base_a: int
+        base_b: str
+
+    @_py_class_repr(_unique_key_repr("ReprD"))
+    class ReprD(ReprP):
+        derived_a: float
+        derived_b: _Optional_repr[str]  # noqa: UP045
+
+    r = repr(ReprD(base_a=1, base_b="b", derived_a=2.0, derived_b="c"))
+    assert "1" in r
+    assert "2" in r
+
+
+def test_repr_py_class_in_array() -> None:
+    """@py_class objects inside Array have proper repr."""
+
+    @_py_class_repr(_unique_key_repr("ReprInArr"))
+    class ReprInArr(_Object_repr):
+        x: int
+
+    r = repr(tvm_ffi.Array([ReprInArr(x=1), ReprInArr(x=2)]))
+    assert "1" in r
+    assert "2" in r
+
+
+# ---------------------------------------------------------------------------
+# Custom __ffi_repr__ hook via @py_class
+# ---------------------------------------------------------------------------
+from typing import Any as _Any_repr
+from typing import Callable as _Callable_repr
+
+
+def test_py_class_custom_ffi_repr() -> None:
+    """ReprPrint dispatches the user-defined __ffi_repr__ hook."""
+
+    @_py_class_repr(_unique_key_repr("CRepr"))
+    class CRepr(_Object_repr):
+        value: int
+
+        def __ffi_repr__(self, fn_repr: _Callable_repr[..., _Any_repr]) -> str:
+            return f"<CRepr:{self.value}>"
+
+    assert ReprPrint(CRepr(42)) == "<CRepr:42>"
+    assert ReprPrint(CRepr(999)) == "<CRepr:999>"
+
+
+def test_py_class_ffi_repr_with_fields_and_copy() -> None:
+    """Fields work normally and copy preserves __ffi_repr__ behaviour."""
+    import copy as _copy_repr  # noqa: PLC0415
+
+    @_py_class_repr(_unique_key_repr("FnR"))
+    class FnR(_Object_repr):
+        a: int
+        b: str
+
+        def __ffi_repr__(self, fn_repr: _Callable_repr[..., _Any_repr]) -> str:
+            return f"FnR({self.a}, {self.b!r})"
+
+    obj = FnR(10, "hi")
+    assert obj.a == 10
+    assert obj.b == "hi"
+    assert ReprPrint(obj) == "FnR(10, 'hi')"
+    obj2 = _copy_repr.copy(obj)
+    assert ReprPrint(obj2) == "FnR(10, 'hi')"
 
 
 if __name__ == "__main__":
