@@ -70,9 +70,9 @@ jobs:
           CIBW_BEFORE_ALL_WINDOWS: >-
             powershell -ExecutionPolicy Bypass -File {project}\addons\tvm-ffi-orcjit\scripts\install_llvm.ps1
           CIBW_ENVIRONMENT_WINDOWS: LLVM_PREFIX="C:/opt/llvm"
-          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_REQUIRES: pytest ninja
           CIBW_TEST_COMMAND: >-
-            pip install --force-reinstall --no-deps {project} &&
+            pip install --force-reinstall {project} &&
             python {project}/addons/tvm-ffi-orcjit/tests/run_all_tests.py
 
       - uses: actions/upload-artifact@v4
