@@ -63,8 +63,8 @@ sdist.include = [
   "/src/**/*.cc",
   "/src/**/*.cpp",
   "/python/**/*.py",
-  "/tools/*.sh",
-  "/tools/*.ps1",
+  "/scripts/*.sh",
+  "/scripts/*.ps1",
 ]
 
 [tool.scikit-build.cmake.define]
@@ -77,12 +77,9 @@ build = "cp312-*"
 skip = "*-win32 *-manylinux_i686 *-musllinux*"
 
 [tool.cibuildwheel.linux]
-environment = { LLVM_VERSION = "22.1.0", CMAKE_PREFIX_PATH = "/opt/llvm", LLVM_CONFIG_PATH = "/opt/llvm/bin/llvm-config" }
+# CMAKE_PREFIX_PATH / LLVM_CONFIG_PATH are unnecessary when LLVM is installed
+# in a conda env (cmake auto-discovers via CONDA_PREFIX).
 repair-wheel-command = "auditwheel repair --exclude libtvm_ffi.so -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
-environment = { LLVM_VERSION = "22.1.0", CMAKE_PREFIX_PATH = "/opt/llvm", LLVM_CONFIG_PATH = "/opt/llvm/bin/llvm-config" }
 repair-wheel-command = "delocate-wheel --ignore-missing-dependencies --exclude libtvm_ffi.dylib -w {dest_dir} -v {wheel}"
-
-[tool.cibuildwheel.windows]
-environment = { LLVM_VERSION = "22.1.0", CMAKE_PREFIX_PATH = "C:/opt/llvm/Library;C:/opt/llvm", LLVM_CONFIG_PATH = "C:/opt/llvm/Library/bin/llvm-config.exe" }

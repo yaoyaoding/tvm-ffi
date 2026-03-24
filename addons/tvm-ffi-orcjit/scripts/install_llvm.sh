@@ -17,7 +17,7 @@
 # under the License.
 
 # Install LLVM from conda-forge using micromamba.
-# Usage: bash tools/install_llvm.sh [version]
+# Usage: bash scripts/install_llvm.sh [version]
 #   version defaults to LLVM_VERSION env var, then 22.1.0
 set -ex
 

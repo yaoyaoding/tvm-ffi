@@ -193,7 +193,7 @@ tvm-ffi-orcjit/
 │   └── dylib.py                # Python DynamicLibrary wrapper
 ├── tests/                      # See tests/README.md
 ├── examples/quick-start/       # Complete example with CMake
-└── tools/
+└── scripts/
     ├── install_llvm.sh         # LLVM installation helper (Linux/macOS)
     └── install_llvm.ps1        # LLVM installation helper (Windows)
 ```

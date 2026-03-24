@@ -16,7 +16,7 @@
 # under the License.
 
 # Install LLVM from conda-forge using micromamba (Windows).
-# Usage: powershell -ExecutionPolicy Bypass -File tools/install_llvm.ps1 [version]
+# Usage: powershell -ExecutionPolicy Bypass -File scripts/install_llvm.ps1 [version]
 #   version defaults to LLVM_VERSION env var, then 22.1.0
 
 param(

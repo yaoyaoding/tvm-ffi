@@ -34,38 +34,16 @@ import argparse
 import sys
 from pathlib import Path
 
-# Use the installed package if available; fall back to source tree for editable dev
-try:
-    from tvm_ffi_orcjit import ExecutionSession
-except ImportError:
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
-    from tvm_ffi_orcjit import ExecutionSession
+from tvm_ffi_orcjit import ExecutionSession
 
 
-def main() -> int:
-    """Run the quick start example."""
-    parser = argparse.ArgumentParser(description="Quick Start Example")
-    parser.add_argument(
-        "--lang",
-        choices=["cpp", "c"],
-        default="cpp",
-        help="Language variant to load: 'cpp' for add.o (default), 'c' for add_c.o",
-    )
-    args = parser.parse_args()
+def _run_tests(obj_file: Path, lang: str) -> None:
+    """Load object file and run all test assertions.
 
-    # Select object file based on language choice
-    if args.lang == "c":
-        obj_file = Path("add_c.o")
-    else:
-        obj_file = Path("add.o")
-
-    if not obj_file.exists():
-        print(f"Error: {obj_file} not found!")
-        print("Please build with CMake first:")
-        print("  cmake -B build && cmake --build build")
-        return 1
-
-    print(f"Loading object file: {obj_file} (lang={args.lang})")
+    All JIT references (functions, lib, session) are released automatically
+    when this function returns.
+    """
+    print(f"Loading object file: {obj_file} (lang={lang})")
 
     # Create execution session and dynamic library
     session = ExecutionSession()
@@ -95,26 +73,43 @@ def main() -> int:
     print(f"fibonacci(10) = {result}")
     assert result == 55, f"Expected 55, got {result}"
 
-    if args.lang == "cpp":
+    if lang == "cpp":
         # String concatenation only available in C++ variant (uses std::string)
         print("\n=== Testing concat function ===")
         concat = lib.get_function("concat")
         result = concat("Hello, ", "World!")
         print(f"concat('Hello, ', 'World!') = '{result}'")
         assert result == "Hello, World!", f"Expected 'Hello, World!', got '{result}'"
-        # Release the returned String object before JIT module is destroyed
-        del result
-        del concat
 
     print("\n" + "=" * 50)
     print("All tests passed successfully!")
     print("=" * 50)
 
-    # Cleanup: release references in correct order (functions, lib, session)
-    del add, multiply, fibonacci
-    del lib
-    del session
 
+def main() -> int:
+    """Run the quick start example."""
+    parser = argparse.ArgumentParser(description="Quick Start Example")
+    parser.add_argument(
+        "--lang",
+        choices=["cpp", "c"],
+        default="cpp",
+        help="Language variant to load: 'cpp' for add.o (default), 'c' for add_c.o",
+    )
+    args = parser.parse_args()
+
+    # Select object file based on language choice
+    if args.lang == "c":
+        obj_file = Path("add_c.o")
+    else:
+        obj_file = Path("add.o")
+
+    if not obj_file.exists():
+        print(f"Error: {obj_file} not found!")
+        print("Please build with CMake first:")
+        print("  cmake -B build && cmake --build build")
+        return 1
+
+    _run_tests(obj_file, args.lang)
     return 0
 
 
