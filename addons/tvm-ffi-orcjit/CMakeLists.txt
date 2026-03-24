@@ -10,8 +10,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Derive CMAKE_PREFIX_PATH from LLVM_PREFIX. scikit-build-core overrides CMAKE_PREFIX_PATH via
-# its CMake init cache, so we read LLVM_PREFIX from the environment instead.
+# Derive CMAKE_PREFIX_PATH from LLVM_PREFIX. scikit-build-core overrides CMAKE_PREFIX_PATH via its
+# CMake init cache, so we read LLVM_PREFIX from the environment instead.
 if (DEFINED ENV{LLVM_PREFIX})
   list(APPEND CMAKE_PREFIX_PATH "$ENV{LLVM_PREFIX}")
   # conda-style layout on Windows: cmake config is under Library/
