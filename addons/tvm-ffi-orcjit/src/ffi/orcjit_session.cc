@@ -74,10 +74,14 @@ struct LLVMInitializer {
 static LLVMInitializer llvm_initializer;
 
 class InitFiniPlugin : public llvm::orc::ObjectLinkingLayer::Plugin {
-  ORCJITExecutionSession session_;
+  // Store a raw pointer to avoid a reference cycle:
+  //   Session → LLJIT → ObjectLinkingLayer → Plugin → Session
+  // The plugin's lifetime is bounded by the ObjectLinkingLayer which is
+  // owned by LLJIT which is owned by the session, so the pointer is always valid.
+  ORCJITExecutionSessionObj* session_;
 
  public:
-  explicit InitFiniPlugin(ORCJITExecutionSession session) : session_(std::move(session)) {}
+  explicit InitFiniPlugin(ORCJITExecutionSessionObj* session) : session_(session) {}
 
   void modifyPassConfig(llvm::orc::MaterializationResponsibility& MR, llvm::jitlink::LinkGraph& G,
                         llvm::jitlink::PassConfiguration& Config) override {
@@ -561,7 +565,7 @@ ORCJITExecutionSessionObj::ORCJITExecutionSessionObj(const std::string& orc_rt_p
   // macOS: MachOPlatform handles init/fini natively via jit_->initialize()/deinitialize().
   auto& objlayer = jit_->getObjLinkingLayer();
   static_cast<llvm::orc::ObjectLinkingLayer&>(objlayer).addPlugin(
-      std::make_unique<InitFiniPlugin>(GetRef<ORCJITExecutionSession>(this)));
+      std::make_unique<InitFiniPlugin>(this));
 #endif
 #ifdef _WIN32
   // On Windows, the default process-symbol generator only searches the main

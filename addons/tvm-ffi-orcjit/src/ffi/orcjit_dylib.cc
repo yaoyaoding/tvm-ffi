@@ -154,9 +154,12 @@ Optional<Function> ORCJITDynamicLibraryObj::GetFunction(const String& name) {
 
   // Try to get the symbol - return NullOpt if not found
   if (void* symbol = GetSymbol(symbol_name)) {
-    // Wrap C function pointer as tvm-ffi Function
+    // Wrap C function pointer as tvm-ffi Function.
+    // Capture a strong self-ref so the module (and its JIT code pages) stays
+    // alive as long as the returned Function is alive.
     TVMFFISafeCallType c_func = reinterpret_cast<TVMFFISafeCallType>(symbol);
-    return Function::FromPacked([c_func](PackedArgs args, Any* rv) {
+    Module self_strong_ref = GetRef<Module>(this);
+    return Function::FromPacked([c_func, self_strong_ref](PackedArgs args, Any* rv) {
       TVM_FFI_ICHECK_LT(rv->type_index(), ffi::TypeIndex::kTVMFFIStaticObjectBegin);
       TVM_FFI_CHECK_SAFE_CALL((*c_func)(nullptr, reinterpret_cast<const TVMFFIAny*>(args.data()),
                                         args.size(), reinterpret_cast<TVMFFIAny*>(rv)));
