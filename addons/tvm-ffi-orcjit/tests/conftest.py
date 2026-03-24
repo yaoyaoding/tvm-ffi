@@ -211,11 +211,11 @@ def _build_all_variants() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Pytest fixture
+# Pytest hook — runs before test collection so that _discover_variants() in
+# test modules can find the compiled objects.
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(autouse=True, scope="session")
-def _build_test_objects() -> None:
+def pytest_configure(config: pytest.Config) -> None:
     """Build test objects for all available compiler variants."""
     _build_all_variants()
