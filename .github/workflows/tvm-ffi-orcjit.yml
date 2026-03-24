@@ -61,13 +61,13 @@ jobs:
           CIBW_ARCHS_WINDOWS: ${{ matrix.arch }}
           CIBW_BUILD_VERBOSITY: 1
           CMAKE_BUILD_PARALLEL_LEVEL: ${{ steps.env_vars.outputs.cpu_count }}
-          CIBW_BEFORE_ALL_LINUX: bash {project}/addons/tvm-ffi-orcjit/tools/install_llvm.sh
+          CIBW_BEFORE_ALL_LINUX: bash {project}/addons/tvm-ffi-orcjit/scripts/install_llvm.sh
           CIBW_BEFORE_ALL_MACOS: >-
             sudo mkdir -p /opt/llvm &&
             sudo chown -R $(whoami) /opt/llvm &&
-            bash {project}/addons/tvm-ffi-orcjit/tools/install_llvm.sh
+            bash {project}/addons/tvm-ffi-orcjit/scripts/install_llvm.sh
           CIBW_BEFORE_ALL_WINDOWS: >-
-            powershell -ExecutionPolicy Bypass -File {project}\addons\tvm-ffi-orcjit\tools\install_llvm.ps1
+            powershell -ExecutionPolicy Bypass -File {project}\addons\tvm-ffi-orcjit\scripts\install_llvm.ps1
           CIBW_TEST_REQUIRES: pytest
           CIBW_BEFORE_TEST: pip install apache-tvm-ffi
           CIBW_TEST_COMMAND: >-
