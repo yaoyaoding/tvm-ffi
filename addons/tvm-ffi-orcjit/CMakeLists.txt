@@ -10,12 +10,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Append CMAKE_PREFIX_PATH from environment. scikit-build-core overrides CMAKE_PREFIX_PATH via its
-# CMake init cache, so any value from the user's environment would be lost. Re-appending ensures
-# find_package(LLVM) works regardless of where LLVM is installed.
-set(_env_prefix "$ENV{CMAKE_PREFIX_PATH}")
-if (_env_prefix)
-  list(APPEND CMAKE_PREFIX_PATH "${_env_prefix}")
+# Derive CMAKE_PREFIX_PATH from LLVM_PREFIX. scikit-build-core overrides CMAKE_PREFIX_PATH via
+# its CMake init cache, so we read LLVM_PREFIX from the environment instead.
+if (DEFINED ENV{LLVM_PREFIX})
+  list(APPEND CMAKE_PREFIX_PATH "$ENV{LLVM_PREFIX}")
+  # conda-style layout on Windows: cmake config is under Library/
+  if (EXISTS "$ENV{LLVM_PREFIX}/Library")
+    list(APPEND CMAKE_PREFIX_PATH "$ENV{LLVM_PREFIX}/Library")
+  endif ()
 endif ()
 
 # Find dependencies
@@ -55,16 +57,15 @@ separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 target_compile_definitions(tvm_ffi_orcjit PRIVATE ${LLVM_DEFINITIONS_LIST})
 
 # ---- Static LLVM Linking via llvm-config ----
-# Allow overriding via env: LLVM_CONFIG_PATH
-if (DEFINED ENV{LLVM_CONFIG_PATH})
-  set(LLVM_CONFIG_EXE "$ENV{LLVM_CONFIG_PATH}")
-else ()
-  find_program(
-    LLVM_CONFIG_EXE
-    NAMES llvm-config-${LLVM_VERSION_MAJOR} llvm-config
-    HINTS ${LLVM_TOOLS_BINARY_DIR} "${LLVM_DIR}/../../../bin"
-  )
+set(_llvm_config_hints ${LLVM_TOOLS_BINARY_DIR} "${LLVM_DIR}/../../../bin")
+if (DEFINED ENV{LLVM_PREFIX})
+  list(APPEND _llvm_config_hints "$ENV{LLVM_PREFIX}/bin" "$ENV{LLVM_PREFIX}/Library/bin")
 endif ()
+find_program(
+  LLVM_CONFIG_EXE
+  NAMES llvm-config-${LLVM_VERSION_MAJOR} llvm-config
+  HINTS ${_llvm_config_hints}
+)
 if (NOT LLVM_CONFIG_EXE)
   message(FATAL_ERROR "llvm-config not found, required for static LLVM linking")
 endif ()

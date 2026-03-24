@@ -26,27 +26,18 @@ load them into the ORC JIT at runtime, and call them from Python.
 | ------ | ------------- |
 | `add.cc` | C++ source using `TVM_FFI_DLL_EXPORT_TYPED_FUNC` (automatic type marshaling, supports `std::string`) |
 | `add_c.c` | Pure C source using `TVMFFISafeCallType` ABI (`__tvm_ffi_` prefix). No C++ runtime needed. |
-| `run.py` | Python script that loads and calls the compiled functions |
-| `CMakeLists.txt` | Build configuration for both variants |
+| `run.py` | Python script that compiles, loads, and calls the functions |
+| `CMakeLists.txt` | Alternative CMake build configuration |
 
 ## Prerequisites
 
-- Python 3.10+, CMake 3.18+, C/C++ compiler
-- `apache-tvm-ffi` and `tvm-ffi-orcjit` packages installed
+- Python 3.10+, C/C++ compiler
+- `apache-tvm-ffi` and `apache-tvm-ffi-orcjit` packages installed
 
-## Steps
+## Run
 
-### 1. Build the object files
-
-```bash
-cmake -B build
-cmake --build build
-```
-
-This produces `add.o` (C++) and `add_c.o` (pure C). On Windows, only the C
-variant is built (C++ is not supported for ORC JIT on Windows).
-
-### 2. Run
+`run.py` compiles the source files to object files using `tvm_ffi.cpp.build`,
+then loads them into the ORC JIT:
 
 ```bash
 # C++ variant (Linux/macOS)

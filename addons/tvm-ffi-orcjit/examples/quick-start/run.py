@@ -16,14 +16,13 @@
 # specific language governing permissions and limitations
 # under the License.
 
-"""Quick Start Example - Load and call functions from compiled object files.
+"""Quick Start Example - Compile, load, and call functions via ORC JIT.
 
 This script demonstrates how to:
-1. Create an ExecutionSession instance
-2. Create a DynamicLibrary
-3. Load a compiled object file (C++ or pure C)
-4. Get functions by name
-5. Call them like regular Python functions
+1. Compile C/C++ source files to object files using tvm_ffi.cpp.build
+2. Load them into an ORC JIT ExecutionSession
+3. Get functions by name
+4. Call them like regular Python functions
 
 Usage:
     python run.py          # Load C++ object file (add.o)
@@ -34,10 +33,29 @@ import argparse
 import sys
 from pathlib import Path
 
+import tvm_ffi.cpp
 from tvm_ffi_orcjit import ExecutionSession
 
+SCRIPT_DIR = Path(__file__).resolve().parent
 
-def _run_tests(obj_file: Path, lang: str) -> None:
+
+def _build_object(lang: str) -> str:
+    """Compile the source file to a relocatable object file."""
+    if lang == "c":
+        return tvm_ffi.cpp.build(
+            name="add_c",
+            sources=[str(SCRIPT_DIR / "add_c.c")],
+            output="add_c.o",
+        )
+    else:
+        return tvm_ffi.cpp.build(
+            name="add",
+            sources=[str(SCRIPT_DIR / "add.cc")],
+            output="add.o",
+        )
+
+
+def _run_tests(obj_file: str, lang: str) -> None:
     """Load object file and run all test assertions.
 
     All JIT references (functions, lib, session) are released automatically
@@ -48,7 +66,7 @@ def _run_tests(obj_file: Path, lang: str) -> None:
     # Create execution session and dynamic library
     session = ExecutionSession()
     lib = session.create_library()
-    lib.add(str(obj_file))
+    lib.add(obj_file)
 
     print("Object file loaded successfully\n")
 
@@ -97,18 +115,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Select object file based on language choice
-    if args.lang == "c":
-        obj_file = Path("add_c.o")
-    else:
-        obj_file = Path("add.o")
-
-    if not obj_file.exists():
-        print(f"Error: {obj_file} not found!")
-        print("Please build with CMake first:")
-        print("  cmake -B build && cmake --build build")
-        return 1
-
+    obj_file = _build_object(args.lang)
     _run_tests(obj_file, args.lang)
     return 0
 

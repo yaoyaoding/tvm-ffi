@@ -19,27 +19,21 @@
 
 ## Quick Start
 
-Build all compiler variants and run all tests in one step:
+Run pytest directly — default test objects (c/, cc/) are auto-built by
+`conftest.py` using `tvm_ffi.cpp.build`:
+
+```bash
+pytest tests/ -v
+```
+
+### Full CI run (pytest + quick-start)
 
 ```bash
 python tests/run_all_tests.py
 ```
 
-This auto-detects the platform, compiles test objects with every available
-compiler, runs pytest, and runs the quick-start examples. Objects are cached
-by mtime — re-running is near-instant when nothing changed.
-
-### Build only (no tests)
-
-```bash
-python tests/build_test_objects.py [--llvm-prefix /opt/llvm]
-```
-
-### Run tests only (objects must already exist)
-
-```bash
-pytest tests/ -v
-```
+This runs pytest (which auto-builds objects for all available compiler variants
+via `conftest.py`) and runs the quick-start examples.
 
 ### Alternative: cmake-based build
 
@@ -85,8 +79,8 @@ tests/
   c-gcc/        Installed C objects (GCC variant)
   cc-gcc/       Installed C++ objects (GCC variant)
   ...           Other compiler variant directories
-  build_test_objects.py  Direct compiler build script
-  run_all_tests.py      Build + test entry point (CI)
+  conftest.py           Auto-builds all compiler variant objects via tvm_ffi.cpp.build
+  run_all_tests.py      CI entry point (pytest + quick-start)
   test_basic.py         Python test cases
   CMakeLists.txt        Alternative cmake build
 ```

@@ -28,7 +28,7 @@ def test_build_cpp() -> None:
     cpp_path = pathlib.Path(__file__).parent.resolve() / "test_build.cc"
     output_lib_path = tvm_ffi.cpp.build(
         name="hello",
-        cpp_files=[str(cpp_path)],
+        sources=[str(cpp_path)],
     )
 
     mod: Module = tvm_ffi.load_module(output_lib_path)

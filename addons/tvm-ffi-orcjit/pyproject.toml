@@ -77,8 +77,8 @@ build = "cp312-*"
 skip = "*-win32 *-manylinux_i686 *-musllinux*"
 
 [tool.cibuildwheel.linux]
-# CMAKE_PREFIX_PATH / LLVM_CONFIG_PATH are unnecessary when LLVM is installed
-# in a conda env (cmake auto-discovers via CONDA_PREFIX).
+# LLVM_PREFIX is unnecessary when LLVM is installed in a conda env
+# (cmake auto-discovers via CONDA_PREFIX) or in a standard system path.
 repair-wheel-command = "auditwheel repair --exclude libtvm_ffi.so -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]

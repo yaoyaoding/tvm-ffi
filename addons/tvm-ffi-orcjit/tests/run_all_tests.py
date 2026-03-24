@@ -15,18 +15,17 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Build test objects, run pytest, and run quick-start examples.
+"""Run pytest and quick-start examples.
 
-Single entry point for CI.  Replaces the separate cmake build step and
-platform-specific test commands.
+Single entry point for CI.  All test objects (including multi-compiler variants)
+are auto-built by conftest.py's session-scoped fixture when pytest runs.
 
 Usage:
-    python run_all_tests.py [--llvm-prefix /opt/llvm]
+    python run_all_tests.py
 """
 
 from __future__ import annotations
 
-import argparse
 import platform
 import subprocess
 import sys
@@ -42,36 +41,18 @@ def _run(cmd: list[str], **kwargs: object) -> None:
 
 
 def main() -> int:
-    """Build test objects, run pytest, and run quick-start examples."""
-    parser = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument(
-        "--llvm-prefix",
-        default=None,
-        help="LLVM install prefix (forwarded to build_test_objects)",
-    )
-    args = parser.parse_args()
-
-    # 1. Build test objects + quick-start example
-    from build_test_objects import ensure_built  # noqa: PLC0415
-
-    ensure_built(args.llvm_prefix)
-
-    # 2. Run pytest
+    """Run pytest and quick-start examples."""
+    # 1. Run pytest (conftest.py auto-builds all compiler variant objects)
     print(f"\n{'=' * 60}\nRunning pytest\n{'=' * 60}\n", flush=True)
     _run([sys.executable, "-m", "pytest", str(TESTS_DIR), "-v"])
 
-    # 3. Run quick-start examples
+    # 2. Run quick-start examples (objects compiled by run.py via tvm_ffi.cpp.build)
     print(f"\n{'=' * 60}\nRunning quick-start examples\n{'=' * 60}\n", flush=True)
     langs = ["c"]
     if platform.system() != "Windows":
         langs.insert(0, "cpp")
     for lang in langs:
-        _run(
-            [sys.executable, str(QUICKSTART_DIR / "run.py"), "--lang", lang],
-            cwd=str(QUICKSTART_DIR),
-        )
+        _run([sys.executable, str(QUICKSTART_DIR / "run.py"), "--lang", lang])
 
     print(f"\n{'=' * 60}\nAll tests passed\n{'=' * 60}")
     return 0
