@@ -62,12 +62,17 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           CMAKE_BUILD_PARALLEL_LEVEL: ${{ steps.env_vars.outputs.cpu_count }}
           CIBW_BEFORE_ALL_LINUX: bash {project}/addons/tvm-ffi-orcjit/scripts/install_llvm.sh
+          CIBW_ENVIRONMENT_LINUX: CMAKE_PREFIX_PATH=/opt/llvm LLVM_CONFIG_PATH=/opt/llvm/bin/llvm-config
           CIBW_BEFORE_ALL_MACOS: >-
             sudo mkdir -p /opt/llvm &&
             sudo chown -R $(whoami) /opt/llvm &&
             bash {project}/addons/tvm-ffi-orcjit/scripts/install_llvm.sh
+          CIBW_ENVIRONMENT_MACOS: CMAKE_PREFIX_PATH=/opt/llvm LLVM_CONFIG_PATH=/opt/llvm/bin/llvm-config
           CIBW_BEFORE_ALL_WINDOWS: >-
             powershell -ExecutionPolicy Bypass -File {project}\addons\tvm-ffi-orcjit\scripts\install_llvm.ps1
+          CIBW_ENVIRONMENT_WINDOWS: >-
+            CMAKE_PREFIX_PATH="C:/opt/llvm/Library;C:/opt/llvm"
+            LLVM_CONFIG_PATH="C:/opt/llvm/Library/bin/llvm-config.exe"
           CIBW_TEST_REQUIRES: pytest
           CIBW_BEFORE_TEST: pip install apache-tvm-ffi
           CIBW_TEST_COMMAND: >-
