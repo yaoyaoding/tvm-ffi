@@ -458,11 +458,11 @@ ORCJITExecutionSessionObj::ORCJITExecutionSessionObj(const std::string& orc_rt_p
     auto builder = llvm::orc::LLJITBuilder();
     builder.setPlatformSetUp(llvm::orc::ExecutorNativePlatform(orc_rt_path));
     setup_builder(builder);
-    jit_ = std::move(call_llvm(builder.create(), "Failed to create LLJIT with ORC runtime"));
+    jit_ = TVM_FFI_ORCJIT_LLVM_CALL(builder.create());
   } else {
     auto builder = llvm::orc::LLJITBuilder();
     setup_builder(builder);
-    jit_ = std::move(call_llvm(builder.create(), "Failed to create LLJIT"));
+    jit_ = TVM_FFI_ORCJIT_LLVM_CALL(builder.create());
   }
 #ifdef _WIN32
   // Strip .pdata/.xdata relocations from COFF objects before JITLink graph building.
@@ -597,7 +597,7 @@ ORCJITDynamicLibrary ORCJITExecutionSessionObj::CreateDynamicLibrary(const Strin
   }
 
   llvm::orc::JITDylib& jit_dylib =
-      call_llvm(jit_->getExecutionSession().createJITDylib(lib_name.c_str()));
+      TVM_FFI_ORCJIT_LLVM_CALL(jit_->getExecutionSession().createJITDylib(lib_name.c_str()));
   // Use the LLJIT's default link order (Main → Platform → ProcessSymbols).
   // This provides host process symbols via the ProcessSymbols JITDylib's generator,
   // while ensuring the platform's __cxa_atexit interposer (in PlatformJD) takes

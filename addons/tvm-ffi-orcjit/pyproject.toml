@@ -20,7 +20,7 @@ requires = ["scikit-build-core>=0.10.0", "apache-tvm-ffi"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "tvm-ffi-orcjit"
+name = "apache-tvm-ffi-orcjit"
 version = "0.1.0"
 description = "Load TVM-FFI exported object files using LLVM ORC JIT v2"
 readme = "README.md"

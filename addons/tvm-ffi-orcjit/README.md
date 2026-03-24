@@ -63,7 +63,7 @@ Pure C objects using the `TVMFFISafeCallType` ABI work on all platforms.
 
 ```bash
 pip install apache-tvm-ffi
-pip install tvm-ffi-orcjit
+pip install apache-tvm-ffi-orcjit
 ```
 
 ### Development Installation
@@ -208,7 +208,7 @@ and runs the full test suite. See `.github/workflows/tvm-ffi-orcjit.yml`.
 
 ### "Cannot find global function" error
 
-The shared library wasn't loaded. Reinstall: `pip install --force-reinstall tvm-ffi-orcjit`
+The shared library wasn't loaded. Reinstall: `pip install --force-reinstall apache-tvm-ffi-orcjit`
 
 ### "Duplicate definition of symbol" error
 

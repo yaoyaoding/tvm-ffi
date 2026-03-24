@@ -83,7 +83,7 @@ void ORCJITDynamicLibraryObj::AddObjectFile(const String& path) {
   }
 
   // Add object file to this JITDylib
-  call_llvm(jit_->addObjectFile(*dylib_, std::move(*buffer_or_err)), "Failed to add object file");
+  TVM_FFI_ORCJIT_LLVM_CALL(jit_->addObjectFile(*dylib_, std::move(*buffer_or_err)));
 }
 
 void ORCJITDynamicLibraryObj::SetLinkOrder(const std::vector<llvm::orc::JITDylib*>& dylibs) {

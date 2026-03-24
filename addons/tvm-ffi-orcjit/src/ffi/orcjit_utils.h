@@ -19,7 +19,11 @@
 
 /*!
  * \file orcjit_utils.h
- * \brief LLVM ORC JIT utils
+ * \brief LLVM ORC JIT utility macros and helpers.
+ *
+ * Provides TVM_FFI_ORCJIT_LLVM_CALL, a macro that checks an LLVM
+ * Error or Expected<T> result and throws a TVM FFI InternalError
+ * on failure.
  */
 #ifndef TVM_FFI_ORCJIT_ORCJIT_UTILS_H_
 #define TVM_FFI_ORCJIT_ORCJIT_UTILS_H_
@@ -33,38 +37,54 @@
 namespace tvm {
 namespace ffi {
 namespace orcjit {
+namespace detail {
 
-inline void call_llvm(llvm::Error err, const std::string& context_msg = "") {
+/*! \brief Check an llvm::Error and throw on failure. */
+inline void CallLLVM(llvm::Error err, const char* expr, const char* file, int line) {
   if (err) {
     std::string err_msg;
     llvm::handleAllErrors(std::move(err),
                           [&](const llvm::ErrorInfoBase& eib) { err_msg = eib.message(); });
-    TVM_FFI_THROW(InternalError) << context_msg << ": " << err_msg;
+    TVM_FFI_THROW(InternalError) << file << ":" << line << ": " << expr << " failed: " << err_msg;
   }
 }
 
+/*! \brief Check an llvm::Expected<T> and return the value or throw on failure. */
 template <typename T>
-inline T call_llvm(llvm::Expected<T> value_or_err, const std::string& context_msg = "") {
+inline T CallLLVM(llvm::Expected<T> value_or_err, const char* expr, const char* file, int line) {
   if (value_or_err) return std::move(*value_or_err);
 
   std::string err_msg;
   llvm::handleAllErrors(std::move(value_or_err.takeError()),
                         [&](const llvm::ErrorInfoBase& eib) { err_msg = eib.message(); });
-  TVM_FFI_THROW(InternalError) << context_msg << ": " << err_msg;
+  TVM_FFI_THROW(InternalError) << file << ":" << line << ": " << expr << " failed: " << err_msg;
 }
 
+/*! \brief Check an llvm::Expected<T&> and return the reference or throw on failure. */
 template <typename T>
-inline T& call_llvm(llvm::Expected<T&> value_or_err, const std::string& context_msg = "") {
+inline T& CallLLVM(llvm::Expected<T&> value_or_err, const char* expr, const char* file, int line) {
   if (value_or_err) return *value_or_err;
 
   std::string err_msg;
   llvm::handleAllErrors(std::move(value_or_err.takeError()),
                         [&](const llvm::ErrorInfoBase& eib) { err_msg = eib.message(); });
-  TVM_FFI_THROW(InternalError) << context_msg << ": " << err_msg;
+  TVM_FFI_THROW(InternalError) << file << ":" << line << ": " << expr << " failed: " << err_msg;
 }
 
+}  // namespace detail
 }  // namespace orcjit
 }  // namespace ffi
 }  // namespace tvm
+
+/*!
+ * \brief Check an LLVM Error or Expected<T> and throw on failure.
+ *
+ * Usage:
+ *   TVM_FFI_ORCJIT_LLVM_CALL(builder.create());
+ *   auto jit = TVM_FFI_ORCJIT_LLVM_CALL(builder.create());
+ *   TVM_FFI_ORCJIT_LLVM_CALL(jit->addObjectFile(...));
+ */
+#define TVM_FFI_ORCJIT_LLVM_CALL(expr) \
+  ::tvm::ffi::orcjit::detail::CallLLVM((expr), #expr, __FILE__, __LINE__)
 
 #endif  // TVM_FFI_ORCJIT_ORCJIT_UTILS_H_
