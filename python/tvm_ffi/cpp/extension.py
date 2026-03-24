@@ -736,8 +736,15 @@ def _build_impl(  # noqa: PLR0913
             object_mode = False
             output_name = f"{name}{'.dll' if IS_WINDOWS else '.so'}"
         if object_mode and IS_WINDOWS:
-            # Windows has no ld -r; the actual target is the first intermediate object
-            obj_name = "cpp_0.o" if source_path_list else "cuda_0.o"
+            # Windows has no ld -r; the actual target is the first intermediate object.
+            # The name must match _generate_ninja_build: c_0.o / cpp_0.o / cuda_0.o.
+            first_ext = Path(sorted(source_path_list)[0]).suffix.lower() if source_path_list else ""
+            if first_ext == ".c":
+                obj_name = "c_0.o"
+            elif first_ext == ".cu":
+                obj_name = "cuda_0.o"
+            else:
+                obj_name = "cpp_0.o"
             return str((build_dir / obj_name).resolve())
         return str((build_dir / output_name).resolve())
 
