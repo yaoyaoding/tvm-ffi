@@ -179,17 +179,21 @@ def _build_all_variants() -> None:
             )
 
     elif system == "Windows":
+        # On Windows, tvm_ffi.cpp.build generates MSVC-style ninja rules, so we
+        # must use MSVC-compatible compilers (cl or clang-cl), not GNU-style clang.
         llvm = _find_llvm_clang()
         if llvm:
-            clang, _ = llvm
-            _build_variant(
-                "LLVM Clang",
-                cc=clang,
-                cxx=None,
-                extra_cflags=extra,
-                c_outdir=TESTS_DIR / "c",
-                cc_outdir=None,
-            )
+            # Use clang-cl from LLVM_PREFIX (MSVC-compatible LLVM driver)
+            clang_cl = Path(llvm[0]).parent / "clang-cl.exe"
+            if clang_cl.exists():
+                _build_variant(
+                    "LLVM clang-cl",
+                    cc=str(clang_cl),
+                    cxx=None,
+                    extra_cflags=["/GS-"],
+                    c_outdir=TESTS_DIR / "c",
+                    cc_outdir=None,
+                )
         if shutil.which("cl"):
             _build_variant(
                 "MSVC",

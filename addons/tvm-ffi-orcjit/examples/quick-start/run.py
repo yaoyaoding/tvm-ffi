@@ -29,7 +29,10 @@ Usage:
     python run.py --lang c # Load pure C object file (add_c.o)
 """
 
+from __future__ import annotations
+
 import argparse
+import platform
 import sys
 from pathlib import Path
 
@@ -39,6 +42,14 @@ from tvm_ffi_orcjit import ExecutionSession
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 
+def _extra_cflags() -> list[str]:
+    """Return extra compiler flags for the current platform."""
+    machine = platform.machine()
+    if machine in ("aarch64", "arm64"):
+        return ["-mno-outline-atomics"]
+    return []
+
+
 def _build_object(lang: str) -> str:
     """Compile the source file to a relocatable object file."""
     if lang == "c":
@@ -46,12 +57,14 @@ def _build_object(lang: str) -> str:
             name="add_c",
             sources=[str(SCRIPT_DIR / "add_c.c")],
             output="add_c.o",
+            extra_cflags=_extra_cflags(),
         )
     else:
         return tvm_ffi.cpp.build(
             name="add",
             sources=[str(SCRIPT_DIR / "add.cc")],
             output="add.o",
+            extra_cflags=_extra_cflags(),
         )
 
 
