@@ -55,7 +55,7 @@ ORCJITDynamicLibraryObj::ORCJITDynamicLibraryObj(ORCJITExecutionSession session,
     *ctx_addr = this;
   }
   Module::VisitContextSymbols([this](const ffi::String& name, void* symbol) {
-    if (void** ctx_addr = reinterpret_cast<void**>(GetSymbol(ffi::symbol::tvm_ffi_library_ctx))) {
+    if (void** ctx_addr = reinterpret_cast<void**>(GetSymbol(name))) {
       *ctx_addr = symbol;
     }
   });
