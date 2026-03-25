@@ -73,6 +73,31 @@ struct LLVMInitializer {
 
 static LLVMInitializer llvm_initializer;
 
+/*!
+ * \brief Custom ObjectLinkingLayer plugin for init/fini section handling.
+ *
+ * Collects function pointers from init/fini sections (.init_array, .fini_array,
+ * .ctors, .dtors, .CRT$XC*, .CRT$XT*) and runs them in priority order.
+ *
+ * Three-platform init/fini strategy:
+ *
+ * - **macOS**: MachOPlatform (via orc_rt) handles __mod_init_func/__mod_term_func
+ *   and __cxa_atexit natively. We delegate to jit_->initialize()/deinitialize().
+ *   No InitFiniPlugin needed.
+ *
+ * - **Windows**: COFFPlatform is unusable — it requires MSVC CRT symbols
+ *   (_CxxThrowException, RTTI vtables, etc.) that LLVM's COFF ORC runtime
+ *   cannot provide (stalled for 2+ years). Our plugin handles .CRT$XC*/.CRT$XT*
+ *   sections instead.
+ *
+ * - **Linux**: ELFNixPlatform does not handle .init_array/.fini_array correctly
+ *   prior to https://github.com/llvm/llvm-project/pull/175981. Once a new LLVM
+ *   release includes that patch, we can switch Linux to ELFNixPlatform and
+ *   remove the plugin for that platform.
+ *
+ * The plugin is gated behind `#if defined(__linux__) || defined(_WIN32)` so it
+ * can be removed per-platform as LLVM's native platform support matures.
+ */
 class InitFiniPlugin : public llvm::orc::ObjectLinkingLayer::Plugin {
   // Store a raw pointer to avoid a reference cycle:
   //   Session → LLJIT → ObjectLinkingLayer → Plugin → Session
@@ -565,9 +590,9 @@ ORCJITExecutionSessionObj::ORCJITExecutionSessionObj(const std::string& orc_rt_p
       });
 #endif
 #if defined(__linux__) || defined(_WIN32)
-  // Linux/Windows: use our custom InitFiniPlugin for init/fini section collection
-  // and priority-ordered execution.
-  // macOS: MachOPlatform handles init/fini natively via jit_->initialize()/deinitialize().
+  // Linux/Windows: use our custom InitFiniPlugin for init/fini section
+  // collection and priority-ordered execution. See InitFiniPlugin class
+  // documentation for the three-platform init/fini strategy.
   auto& objlayer = jit_->getObjLinkingLayer();
   static_cast<llvm::orc::ObjectLinkingLayer&>(objlayer).addPlugin(
       std::make_unique<InitFiniPlugin>(this));
