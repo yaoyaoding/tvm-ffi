@@ -21,8 +21,8 @@ This module provides functionality to load object files (.o) compiled with TVM-F
 exports using LLVM ORC JIT v2.
 
 Example:
-    >>> from tvm_ffi_orcjit import create_session
-    >>> session = create_session()
+    >>> from tvm_ffi_orcjit import ExecutionSession
+    >>> session = ExecutionSession()
     >>> lib = session.create_library()
     >>> lib.add("example.o")
     >>> func = lib.get_function("my_function")
@@ -85,4 +85,10 @@ from .dylib import DynamicLibrary
 from .session import ExecutionSession
 
 __all__ = ["DynamicLibrary", "ExecutionSession"]
-__version__ = "0.1.0"
+
+try:
+    from importlib.metadata import version
+
+    __version__ = version("apache-tvm-ffi-orcjit")
+except Exception:
+    __version__ = "0.0.0.dev0"

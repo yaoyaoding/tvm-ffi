@@ -31,7 +31,7 @@ class DynamicLibrary(Module):
 
     Examples
     --------
-    >>> session = create_session()
+    >>> session = ExecutionSession()
     >>> lib = session.create_library()
     >>> lib.add("add.o")
     >>> lib.add("multiply.o")
@@ -71,7 +71,7 @@ class DynamicLibrary(Module):
 
         Examples
         --------
-        >>> session = create_session()
+        >>> session = ExecutionSession()
         >>> lib_utils = session.create_library()
         >>> lib_utils.add("utils.o")
         >>> lib_core = session.create_library()
@@ -82,4 +82,4 @@ class DynamicLibrary(Module):
         >>> lib_main.set_link_order(lib_utils, lib_core)
 
         """
-        self.get_function("orcjit.set_link_order")(libraries)
+        self.get_function("orcjit.set_link_order")(list(libraries))

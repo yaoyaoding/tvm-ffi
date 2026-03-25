@@ -30,6 +30,7 @@
 #include <tvm/ffi/object.h>
 #include <tvm/ffi/string.h>
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 
@@ -98,7 +99,7 @@ class ORCJITExecutionSessionObj : public Object {
   std::unique_ptr<llvm::orc::LLJIT> jit_;
 
   /*! \brief Counter for auto-generating library names */
-  int dylib_counter_ = 0;
+  std::atomic<int> dylib_counter_{0};
 
   std::unordered_map<llvm::orc::JITDylib*, std::vector<InitFiniEntry>> pending_initializers_;
   std::unordered_map<llvm::orc::JITDylib*, std::vector<InitFiniEntry>> pending_deinitializers_;

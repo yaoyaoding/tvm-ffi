@@ -331,6 +331,11 @@ class DLLImportDefinitionGenerator : public llvm::orc::DefinitionGenerator {
         "ucrtbase.dll",
         "msvcp140.dll",
     };
+    // NOTE: We intentionally do not call FreeLibrary() here. These runtime DLLs
+    // (vcruntime140, ucrtbase, etc.) are already loaded by the process and will
+    // remain loaded for its lifetime. LoadLibraryA merely increments the refcount;
+    // the extra refcount is harmless and avoids the overhead of balancing
+    // Get/FreeLibrary for every symbol lookup.
     for (const char* dll : kRuntimeDLLs) {
       if (HMODULE hMod = LoadLibraryA(dll)) {
         if (auto addr = GetProcAddress(hMod, Name.c_str())) {

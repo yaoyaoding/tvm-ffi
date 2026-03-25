@@ -49,6 +49,8 @@ ORCJITDynamicLibraryObj::ORCJITDynamicLibraryObj(ORCJITExecutionSession session,
                                                  llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit,
                                                  String name)
     : session_(std::move(session)), dylib_(dylib), jit_(jit), name_(std::move(name)) {
+  TVM_FFI_CHECK(dylib_ != nullptr, ValueError) << "JITDylib cannot be null";
+  TVM_FFI_CHECK(jit_ != nullptr, ValueError) << "LLJIT cannot be null";
   if (void** ctx_addr = reinterpret_cast<void**>(GetSymbol(ffi::symbol::tvm_ffi_library_ctx))) {
     *ctx_addr = this;
   }
@@ -57,8 +59,6 @@ ORCJITDynamicLibraryObj::ORCJITDynamicLibraryObj(ORCJITExecutionSession session,
       *ctx_addr = symbol;
     }
   });
-  TVM_FFI_CHECK(dylib_ != nullptr, ValueError) << "JITDylib cannot be null";
-  TVM_FFI_CHECK(jit_ != nullptr, ValueError) << "LLJIT cannot be null";
 }
 
 ORCJITDynamicLibraryObj::~ORCJITDynamicLibraryObj() {
