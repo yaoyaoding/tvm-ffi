@@ -52,27 +52,54 @@ Pure C objects using the `TVMFFISafeCallType` ABI work on all platforms.
 
 ## Installation
 
-### Prerequisites
-
-- Python 3.10+
-- CMake 3.18+
-- LLVM 22+ (with ORC JIT support)
-- C/C++ compiler with C++17 support
-
 ### Install from PyPI
 
 ```bash
-pip install apache-tvm-ffi
-pip install apache-tvm-ffi-orcjit
+pip install apache-tvm-ffi apache-tvm-ffi-orcjit
 ```
 
-### Development Installation
+### Build from Source
+
+#### Prerequisites
+
+- Python 3.10+, CMake 3.20+, C++17 compiler
+- LLVM 22+ development libraries (`llvmdev`, `llvm-config`)
+- Static `zlib` and `zstd` libraries (in the same prefix as LLVM)
+
+#### Install LLVM via conda-forge
+
+The easiest way to get all dependencies is via conda-forge:
 
 ```bash
-git clone --recursive https://github.com/cyx-6/tvm-ffi.git
-cd tvm-ffi/addons/tvm-ffi-orcjit
+conda create -p /opt/llvm -c conda-forge \
+  llvmdev=22.1.0 clangdev=22.1.0 compiler-rt=22.1.0 zlib zstd-static -y
+export LLVM_PREFIX=/opt/llvm
+```
+
+On Windows:
+
+```cmd
+conda create -p C:\opt\llvm -c conda-forge llvmdev=22.1.0 zlib zstd-static -y
+set LLVM_PREFIX=C:\opt\llvm
+```
+
+#### Build and install
+
+```bash
+git clone --recursive https://github.com/apache/tvm-ffi.git
+cd tvm-ffi
+
+# Install tvm-ffi first
+pip install -e .
+
+# Build and install the orcjit addon
+cd addons/tvm-ffi-orcjit
 pip install -e .
 ```
+
+The `LLVM_PREFIX` environment variable tells CMake where to find LLVM. If
+LLVM is installed in a conda env or a standard system path, CMake can
+auto-discover it and `LLVM_PREFIX` is not needed.
 
 ## Usage
 
@@ -192,10 +219,7 @@ tvm-ffi-orcjit/
 │   ├── session.py              # Python ExecutionSession wrapper
 │   └── dylib.py                # Python DynamicLibrary wrapper
 ├── tests/                      # See tests/README.md
-├── examples/quick-start/       # Complete example with CMake
-└── scripts/
-    ├── install_llvm.sh         # LLVM installation helper (Linux/macOS)
-    └── install_llvm.ps1        # LLVM installation helper (Windows)
+└── examples/quick-start/       # Complete example with CMake
 ```
 
 ## CI
@@ -226,10 +250,10 @@ checks (`__security_cookie`) which are CRT symbols the JIT cannot resolve.
 
 ### LLVM version mismatch
 
-The package requires LLVM 22+. Set `LLVM_DIR` if CMake can't find it:
+The package requires LLVM 22+. Set `LLVM_PREFIX` to the LLVM install prefix:
 
 ```bash
-export LLVM_DIR=/path/to/llvm/lib/cmake/llvm
+export LLVM_PREFIX=/path/to/llvm
 ```
 
 ## License

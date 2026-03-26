@@ -63,8 +63,6 @@ sdist.include = [
   "/src/**/*.cc",
   "/src/**/*.cpp",
   "/python/**/*.py",
-  "/scripts/*.sh",
-  "/scripts/*.ps1",
 ]
 
 [tool.scikit-build.cmake.define]
