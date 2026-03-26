@@ -38,6 +38,11 @@ find_package(tvm_ffi CONFIG REQUIRED)
 
 # ---- Build shared library ----
 add_library(tvm_ffi_orcjit SHARED src/ffi/orcjit_session.cc src/ffi/orcjit_dylib.cc)
+set_target_properties(
+  tvm_ffi_orcjit
+  PROPERTIES CXX_VISIBILITY_PRESET hidden
+             VISIBILITY_INLINES_HIDDEN ON
+)
 target_include_directories(
   tvm_ffi_orcjit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${LLVM_INCLUDE_DIRS}
 )
@@ -91,53 +96,25 @@ else ()
   )
 endif ()
 
-# ---- zstd ----
-# Try system static zstd first (works for local dev). If not found, build from source via
-# ZSTD_SOURCE_DIR (set by CI via env var, or pass -DZSTD_SOURCE_DIR=<path>).
-if (NOT DEFINED ZSTD_SOURCE_DIR AND DEFINED ENV{ZSTD_SOURCE_DIR})
-  set(ZSTD_SOURCE_DIR "$ENV{ZSTD_SOURCE_DIR}")
-endif ()
-
-if (DEFINED ZSTD_SOURCE_DIR AND EXISTS "${ZSTD_SOURCE_DIR}/build/cmake/CMakeLists.txt")
-  message(STATUS "Building zstd from source: ${ZSTD_SOURCE_DIR}")
-  set(ZSTD_BUILD_SHARED
-      OFF
-      CACHE BOOL "" FORCE
+# ---- zstd (static, from LLVM prefix) ----
+if (WIN32)
+  find_library(
+    ZSTD_STATIC
+    NAMES zstd_static zstd
+    HINTS ${_lib_hints} REQUIRED
   )
-  set(ZSTD_BUILD_STATIC
-      ON
-      CACHE BOOL "" FORCE
-  )
-  set(ZSTD_BUILD_PROGRAMS
-      OFF
-      CACHE BOOL "" FORCE
-  )
-  add_subdirectory(
-    "${ZSTD_SOURCE_DIR}/build/cmake" "${CMAKE_BINARY_DIR}/_deps/zstd" EXCLUDE_FROM_ALL
-  )
-  set(_zstd_lib libzstd_static)
 else ()
-  if (WIN32)
-    find_library(
-      ZSTD_STATIC
-      NAMES zstd_static zstd
-      HINTS ${_lib_hints} REQUIRED
-    )
-  else ()
-    find_library(
-      ZSTD_STATIC
-      NAMES libzstd.a
-      HINTS ${_lib_hints} REQUIRED
-    )
-  endif ()
-  message(STATUS "Found static zstd: ${ZSTD_STATIC}")
-  set(_zstd_lib ${ZSTD_STATIC})
+  find_library(
+    ZSTD_STATIC
+    NAMES libzstd.a
+    HINTS ${_lib_hints} REQUIRED
+  )
 endif ()
 
 # ---- Link everything ----
 target_link_libraries(
   tvm_ffi_orcjit PRIVATE tvm_ffi::header tvm_ffi::shared ${_llvm_ldflags_list} ${_llvm_libs_list}
-                         ${ZLIB_STATIC} ${_zstd_lib}
+                         ${ZLIB_STATIC} ${ZSTD_STATIC}
 )
 
 # LLVM system libs (ntdll/psapi on Windows, rt/dl on Linux), minus zlib/zstd (linked above).
