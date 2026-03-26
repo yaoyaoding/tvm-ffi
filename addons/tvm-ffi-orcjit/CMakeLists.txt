@@ -10,53 +10,41 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# Derive CMAKE_PREFIX_PATH from LLVM_PREFIX. scikit-build-core overrides CMAKE_PREFIX_PATH via its
-# CMake init cache, so we read LLVM_PREFIX from the environment instead.
+# ---- LLVM_PREFIX handling ----
+# scikit-build-core overrides CMAKE_PREFIX_PATH via its init cache, so we read LLVM_PREFIX from the
+# environment instead.
 if (DEFINED ENV{LLVM_PREFIX})
   list(APPEND CMAKE_PREFIX_PATH "$ENV{LLVM_PREFIX}")
-  # conda-style layout on Windows: cmake config is under Library/
   if (EXISTS "$ENV{LLVM_PREFIX}/Library")
     list(APPEND CMAKE_PREFIX_PATH "$ENV{LLVM_PREFIX}/Library")
   endif ()
 endif ()
 
-# Find dependencies
+# ---- Find packages ----
 find_package(LLVM REQUIRED CONFIG)
-message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in ${LLVM_DIR}")
 
-# Find tvm-ffi package using the same method as quickstart example
 find_package(
   Python
   COMPONENTS Interpreter
   REQUIRED
 )
-
-# Get the cmake directory for tvm-ffi
 execute_process(
   COMMAND "${Python_EXECUTABLE}" -m tvm_ffi.config --cmakedir
   OUTPUT_STRIP_TRAILING_WHITESPACE
   OUTPUT_VARIABLE tvm_ffi_ROOT
 )
-message(STATUS "tvm_ffi_ROOT: ${tvm_ffi_ROOT}")
-
 find_package(tvm_ffi CONFIG REQUIRED)
 
-# Source files
-set(SOURCES src/ffi/orcjit_session.cc src/ffi/orcjit_dylib.cc)
-
-# Build shared library
-add_library(tvm_ffi_orcjit SHARED ${SOURCES})
-
+# ---- Build shared library ----
+add_library(tvm_ffi_orcjit SHARED src/ffi/orcjit_session.cc src/ffi/orcjit_dylib.cc)
 target_include_directories(
   tvm_ffi_orcjit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src ${LLVM_INCLUDE_DIRS}
 )
-
-# Compile definitions
 separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 target_compile_definitions(tvm_ffi_orcjit PRIVATE ${LLVM_DEFINITIONS_LIST})
 
-# ---- Static LLVM Linking via llvm-config ----
+# ---- Static LLVM linking via llvm-config ----
 set(_llvm_config_hints ${LLVM_TOOLS_BINARY_DIR} "${LLVM_DIR}/../../../bin")
 if (DEFINED ENV{LLVM_PREFIX})
   list(APPEND _llvm_config_hints "$ENV{LLVM_PREFIX}/bin" "$ENV{LLVM_PREFIX}/Library/bin")
@@ -67,79 +55,106 @@ find_program(
   HINTS ${_llvm_config_hints}
 )
 if (NOT LLVM_CONFIG_EXE)
-  message(FATAL_ERROR "llvm-config not found, required for static LLVM linking")
+  message(FATAL_ERROR "llvm-config not found")
 endif ()
-message(STATUS "Using llvm-config: ${LLVM_CONFIG_EXE}")
 
 execute_process(
   COMMAND ${LLVM_CONFIG_EXE} --link-static --libs Core OrcJIT Support native
   OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE _llvm_static_libs
+  OUTPUT_VARIABLE _llvm_libs
 )
 execute_process(
   COMMAND ${LLVM_CONFIG_EXE} --link-static --ldflags
   OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE _llvm_static_ldflags
+  OUTPUT_VARIABLE _llvm_ldflags
 )
-message(STATUS "LLVM static libs: ${_llvm_static_libs}")
-message(STATUS "LLVM static ldflags: ${_llvm_static_ldflags}")
+separate_arguments(_llvm_libs_list NATIVE_COMMAND "${_llvm_libs}")
+separate_arguments(_llvm_ldflags_list NATIVE_COMMAND "${_llvm_ldflags}")
 
-separate_arguments(_llvm_static_libs_list NATIVE_COMMAND "${_llvm_static_libs}")
-separate_arguments(_llvm_static_ldflags_list NATIVE_COMMAND "${_llvm_static_ldflags}")
-
-# Find static zlib and zstd from the LLVM prefix to avoid dynamic @rpath dependencies (macOS) and to
-# enable manylinux_2_28 compatibility (Linux).
+# ---- zlib (static, from LLVM prefix) ----
 cmake_path(GET LLVM_DIR PARENT_PATH _llvm_prefix)
 cmake_path(GET _llvm_prefix PARENT_PATH _llvm_prefix)
 cmake_path(GET _llvm_prefix PARENT_PATH _llvm_prefix)
+set(_lib_hints "${_llvm_prefix}/lib" "${_llvm_prefix}/lib64" "${_llvm_prefix}/Library/lib")
+
 if (WIN32)
   find_library(
     ZLIB_STATIC
     NAMES zlibstatic z
-    HINTS "${_llvm_prefix}/lib" REQUIRED
-  )
-  find_library(
-    ZSTD_STATIC
-    NAMES zstd_static zstd
-    HINTS "${_llvm_prefix}/lib" REQUIRED
+    HINTS ${_lib_hints} REQUIRED
   )
 else ()
   find_library(
     ZLIB_STATIC
     NAMES libz.a
-    HINTS "${_llvm_prefix}/lib" REQUIRED
-  )
-  find_library(
-    ZSTD_STATIC
-    NAMES libzstd.a
-    HINTS "${_llvm_prefix}/lib" "${_llvm_prefix}/lib64" REQUIRED
+    HINTS ${_lib_hints} REQUIRED
   )
 endif ()
-message(STATUS "Static zlib: ${ZLIB_STATIC}")
-message(STATUS "Static zstd: ${ZSTD_STATIC}")
 
+# ---- zstd ----
+# Try system static zstd first (works for local dev). If not found, build from source via
+# ZSTD_SOURCE_DIR (set by CI via env var, or pass -DZSTD_SOURCE_DIR=<path>).
+if (NOT DEFINED ZSTD_SOURCE_DIR AND DEFINED ENV{ZSTD_SOURCE_DIR})
+  set(ZSTD_SOURCE_DIR "$ENV{ZSTD_SOURCE_DIR}")
+endif ()
+
+if (DEFINED ZSTD_SOURCE_DIR AND EXISTS "${ZSTD_SOURCE_DIR}/build/cmake/CMakeLists.txt")
+  message(STATUS "Building zstd from source: ${ZSTD_SOURCE_DIR}")
+  set(ZSTD_BUILD_SHARED
+      OFF
+      CACHE BOOL "" FORCE
+  )
+  set(ZSTD_BUILD_STATIC
+      ON
+      CACHE BOOL "" FORCE
+  )
+  set(ZSTD_BUILD_PROGRAMS
+      OFF
+      CACHE BOOL "" FORCE
+  )
+  add_subdirectory(
+    "${ZSTD_SOURCE_DIR}/build/cmake" "${CMAKE_BINARY_DIR}/_deps/zstd" EXCLUDE_FROM_ALL
+  )
+  set(_zstd_lib libzstd_static)
+else ()
+  if (WIN32)
+    find_library(
+      ZSTD_STATIC
+      NAMES zstd_static zstd
+      HINTS ${_lib_hints} REQUIRED
+    )
+  else ()
+    find_library(
+      ZSTD_STATIC
+      NAMES libzstd.a
+      HINTS ${_lib_hints} REQUIRED
+    )
+  endif ()
+  message(STATUS "Found static zstd: ${ZSTD_STATIC}")
+  set(_zstd_lib ${ZSTD_STATIC})
+endif ()
+
+# ---- Link everything ----
 target_link_libraries(
-  tvm_ffi_orcjit PRIVATE tvm_ffi::header tvm_ffi::shared ${_llvm_static_ldflags_list}
-                         ${_llvm_static_libs_list} ${ZLIB_STATIC} ${ZSTD_STATIC}
+  tvm_ffi_orcjit PRIVATE tvm_ffi::header tvm_ffi::shared ${_llvm_ldflags_list} ${_llvm_libs_list}
+                         ${ZLIB_STATIC} ${_zstd_lib}
 )
-# Link LLVM system library dependencies (e.g. ntdll, psapi on Windows; rt, dl on Linux). We use
-# llvm-config --system-libs but filter out zlib/zstd since we link our own static copies.
+
+# LLVM system libs (ntdll/psapi on Windows, rt/dl on Linux), minus zlib/zstd (linked above).
 execute_process(
   COMMAND ${LLVM_CONFIG_EXE} --system-libs
   OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE _llvm_system_libs
-  RESULT_VARIABLE _llvm_system_libs_rc
+  OUTPUT_VARIABLE _sys_libs
+  RESULT_VARIABLE _sys_libs_rc
 )
-if (_llvm_system_libs_rc EQUAL 0 AND _llvm_system_libs)
-  separate_arguments(_llvm_system_libs_list NATIVE_COMMAND "${_llvm_system_libs}")
-  # Linux: -lz, -lzstd; Windows: z.lib, zstd.dll.lib, xml2.lib (conda-forge dep)
-  list(FILTER _llvm_system_libs_list EXCLUDE REGEX "(zstd|^-lz$|^z\\.lib$|xml2)")
-  message(STATUS "LLVM system libs: ${_llvm_system_libs_list}")
-  target_link_libraries(tvm_ffi_orcjit PRIVATE ${_llvm_system_libs_list})
+if (_sys_libs_rc EQUAL 0 AND _sys_libs)
+  separate_arguments(_sys_libs_list NATIVE_COMMAND "${_sys_libs}")
+  list(FILTER _sys_libs_list EXCLUDE REGEX "(zstd|^-lz$|^z\\.lib$|xml2)")
+  target_link_libraries(tvm_ffi_orcjit PRIVATE ${_sys_libs_list})
 endif ()
 
+# ---- Platform-specific fixups ----
 if (APPLE)
-  # Fix @rpath/libc++.1.dylib (conda-forge) → /usr/lib/libc++.1.dylib (system)
   add_custom_command(
     TARGET tvm_ffi_orcjit
     POST_BUILD
@@ -148,18 +163,12 @@ if (APPLE)
     COMMENT "Fixing libc++ rpath to use system library"
   )
 elseif (UNIX AND NOT WIN32)
-  # Statically link libstdc++ and libgcc to avoid GLIBCXX version requirements on the target system,
-  # enabling manylinux_2_28 support.
   target_link_options(tvm_ffi_orcjit PRIVATE -static-libstdc++ -static-libgcc)
 endif ()
 
 # ---- Find and bundle liborc_rt ----
-# Search for liborc_rt under the LLVM prefix (provided by compiler-rt package). No clang binary is
-# needed — we search the lib/clang/*/lib/ tree directly.
 set(ORC_RT_PATH "")
-
 if (DEFINED ENV{ORC_RT_PATH})
-  # Allow explicit override via environment variable
   set(ORC_RT_PATH "$ENV{ORC_RT_PATH}")
 else ()
   if (WIN32)
@@ -176,19 +185,16 @@ else ()
 endif ()
 
 if (NOT ORC_RT_PATH)
-  message(WARNING "Could not find liborc_rt. " "ORC runtime features will be disabled. "
-                  "Ensure clang runtime libraries are installed (e.g. libclang-rt-dev)."
-  )
+  message(WARNING "Could not find liborc_rt. ORC runtime features will be disabled.")
 endif ()
 
 if (ORC_RT_PATH)
   message(STATUS "Found liborc_rt: ${ORC_RT_PATH}")
-  # Copy into build dir for editable installs (where _lib_dir resolves to CMAKE_BINARY_DIR)
   file(COPY "${ORC_RT_PATH}" DESTINATION "${CMAKE_BINARY_DIR}")
   install(FILES "${ORC_RT_PATH}" DESTINATION lib)
 endif ()
 
-# Installation rules
+# ---- Install ----
 install(
   TARGETS tvm_ffi_orcjit
   LIBRARY DESTINATION lib
