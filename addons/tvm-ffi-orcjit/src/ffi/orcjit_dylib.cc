@@ -113,12 +113,19 @@ void* ORCJITDynamicLibraryObj::GetSymbol(const String& name) {
   auto symbol_or_err =
       jit_->getExecutionSession().lookup(search_order, jit_->mangleAndIntern(name.c_str()));
 
-  // Run pending initializers. Both paths are idempotent: RunPendingInitializers
-  // drains and erases the entry; jit_->initialize() uses dlopen-like refcounting.
+  // Run pending initializers. Both paths are idempotent and support incremental
+  // loading (new object files added between GetSymbol calls).
   // See InitFiniPlugin class doc in orcjit_session.cc for three-platform strategy.
 #if defined(__linux__) || defined(_WIN32)
+  // Linux/Windows: RunPendingInitializers drains and erases the map entry;
+  // subsequent calls are no-ops until new object files add fresh entries.
   session_->RunPendingInitializers(GetJITDylib());
 #else
+  // macOS: LLJIT tracks an InitializedDylib set (LLJIT.h:624). First call
+  // invokes dlopen (refcount 0→1, runs initializers). Subsequent calls
+  // invoke dlupdate (no refcount bump, runs only new initializers from
+  // newly-added object files). The single deinitialize() in the destructor
+  // calls dlclose (refcount 1→0), so the count stays balanced.
   if (auto err = jit_->initialize(*dylib_)) {
     llvm::consumeError(std::move(err));
   }
