@@ -41,6 +41,7 @@ import tvm_ffi.cpp
 SOURCES_DIR = Path(__file__).resolve().parent / "sources"
 SOURCES_C = SOURCES_DIR / "c"
 SOURCES_CC = SOURCES_DIR / "cc"
+SOURCES_CUDA = SOURCES_DIR / "cuda"
 
 _DEFAULT_OUT_DIR = Path(tempfile.gettempdir()) / "tvm_ffi_orcjit_tests"
 
@@ -223,5 +224,9 @@ def build_test_objects(out_dir: Path | None = None) -> Path:
                 c_outdir=out_dir / "c-clang-cl",
                 cc_outdir=None,
             )
+
+    # CUDA (platform-independent, uses nvcc)
+    if shutil.which("nvcc"):
+        _build_objects(SOURCES_CUDA, out_dir / "cuda", ext_glob="*.cu", extra_cflags=[])
 
     return out_dir
