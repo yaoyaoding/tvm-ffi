@@ -122,6 +122,8 @@ celerybeat-schedule
 # Allow composite actions under .github/actions despite build-* ignore pattern
 !.github/actions/build-wheel-for-publish/
 !.github/actions/build-wheel-for-publish/action.yml
+!.github/actions/build-orcjit-wheel/
+!.github/actions/build-orcjit-wheel/action.yml
 celerybeat.pid
 
 # SageMath parsed files

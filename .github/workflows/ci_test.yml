@@ -35,6 +35,7 @@ jobs:
       should_skip_ci_docs_only: ${{ steps.detect.outputs.should_skip_ci_docs_only }}
       cpp_changed: ${{ steps.cpp_files.outputs.changed }}
       cpp_files: ${{ steps.cpp_files.outputs.files }}
+      orcjit_changed: ${{ steps.orcjit_files.outputs.changed }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -52,6 +53,13 @@ jobs:
         run: |
           FILES=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD -- \
             src/ tests/ | grep -E '\.(c|cc|cpp|cxx)$' | tr '\n' ' ')
+          echo "files=$FILES" >> $GITHUB_OUTPUT
+          [ -n "$FILES" ] && echo "changed=true" >> $GITHUB_OUTPUT || echo "changed=false" >> $GITHUB_OUTPUT
+      - name: Get changed OrcJIT files
+        id: orcjit_files
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACMR origin/${{ github.base_ref }}...HEAD -- \
+            addons/tvm_ffi_orcjit/ .github/actions/build-orcjit-wheel/ | tr '\n' ' ')
           echo "files=$FILES" >> $GITHUB_OUTPUT
           [ -n "$FILES" ] && echo "changed=true" >> $GITHUB_OUTPUT || echo "changed=false" >> $GITHUB_OUTPUT
 
@@ -199,3 +207,37 @@ jobs:
         working-directory: rust
         run: |
           cargo test
+
+  orcjit:
+    needs: [lint, prepare]
+    if: >
+      needs.prepare.outputs.orcjit_changed == 'true' &&
+      needs.prepare.outputs.should_skip_ci_commit != 'true' &&
+      needs.prepare.outputs.should_skip_ci_docs_only != 'true'
+    name: orcjit ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, arch: x86_64, build: "cp312-manylinux_x86_64"}
+          - {os: ubuntu-24.04-arm, arch: aarch64, build: "cp312-manylinux_aarch64"}
+          - {os: macos-14, arch: arm64, build: "cp312-macosx_arm64"}
+          - {os: windows-latest, arch: AMD64, build: "cp312-win_amd64"}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Build OrcJIT wheel
+        uses: ./.github/actions/build-orcjit-wheel
+        with:
+          arch: ${{ matrix.arch }}
+          build: ${{ matrix.build }}
+          checkout_ref: ${{ github.sha }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cibw-orcjit-wheels-${{ matrix.os }}-${{ matrix.arch }}-${{ strategy.job-index }}
+          path: wheelhouse/*.whl
