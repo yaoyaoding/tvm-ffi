@@ -49,6 +49,7 @@ ALLOW_EXTENSION = {
     "cu",
     "cuh",
     "bat",
+    "ps1",
     # configurations
     "mk",
     "in",

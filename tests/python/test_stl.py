@@ -25,7 +25,7 @@ def test_stl() -> None:
     cpp_path = pathlib.Path(__file__).parent.resolve() / "cpp_src" / "test_stl.cc"
     output_lib_path = tvm_ffi.cpp.build(
         name="test_stl",
-        cpp_files=[str(cpp_path)],
+        sources=[str(cpp_path)],
     )
 
     mod: Module = tvm_ffi.load_module(output_lib_path)

@@ -338,24 +338,38 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
     extra_cuda_cflags: Sequence[str],
     extra_ldflags: Sequence[str],
     extra_include_paths: Sequence[str],
-    cpp_files: Sequence[str],
-    cuda_files: Sequence[str],
+    sources: Sequence[str],
     embed_cubin: Mapping[str, bytes] | None = None,
     backend: str | None = None,
+    output: str | None = None,
 ) -> str:
     """Generate the content of build.ninja for building the module."""
+    # Determine output format from extension
+    if output is not None:
+        out_ext = Path(output).suffix.lower()
+        object_mode = out_ext in (".o", ".obj")
+        output_name = output
+    else:
+        object_mode = False
+        output_name = f"{name}{'.dll' if IS_WINDOWS else '.so'}"
+    has_cuda_sources = any(Path(s).suffix.lower() == ".cu" for s in sources)
     with_hip = backend == "hip"
     with_cuda = backend == "cuda"
-    with_backend = with_hip or with_cuda
+    with_backend = with_hip or with_cuda or has_cuda_sources
+    if has_cuda_sources and not (with_hip or with_cuda):
+        # Auto-detect backend from available GPU
+        detected = _resolve_gpu_backend(None)
+        with_hip = detected == "hip"
+        with_cuda = detected == "cuda"
 
     default_include_paths = [find_include_path(), find_dlpack_include_path()]
     tvm_ffi_lib = Path(find_libtvm_ffi())
     tvm_ffi_lib_path = str(tvm_ffi_lib.parent)
     tvm_ffi_lib_name = tvm_ffi_lib.stem
     if IS_WINDOWS:
-        default_cflags = [
-            "/std:c++17",
-            "/MD",
+        default_cflags = ["/O2", "/MD"]
+        default_cxxflags = ["/std:c++17", "/MD", "/EHsc"]
+        _win_warnings = [
             "/wd4819",
             "/wd4251",
             "/wd4244",
@@ -366,8 +380,9 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
             "/wd4624",
             "/wd4067",
             "/wd4068",
-            "/EHsc",
         ]
+        default_cflags += _win_warnings
+        default_cxxflags += _win_warnings
         default_cuda_cflags = ["-Xcompiler", "/std:c++17", "/O2"]
         default_ldflags = [
             "/DLL",
@@ -375,7 +390,8 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
             f"{tvm_ffi_lib_name}.lib",
         ]
     else:
-        default_cflags = ["-std=c++17", "-fPIC", "-O2"]
+        default_cflags = ["-fPIC", "-O2"]
+        default_cxxflags = ["-std=c++17", "-fPIC", "-O2"]
         default_cuda_cflags = ["-std=c++17", "-O2"]
         default_ldflags = ["-shared", f"-L{tvm_ffi_lib_path}", "-ltvm_ffi"]
 
@@ -396,7 +412,9 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
                 "-lcudart",  # cuda runtime library
             ]
 
-    cflags = default_cflags + [flag.strip() for flag in extra_cflags]
+    extra_cflags_list = [flag.strip() for flag in extra_cflags]
+    cflags = default_cflags + extra_cflags_list
+    cxxflags = default_cxxflags + extra_cflags_list
     cuda_cflags = default_cuda_cflags + [flag.strip() for flag in extra_cuda_cflags]
     ldflags = default_ldflags + [flag.strip() for flag in extra_ldflags]
     include_paths = default_include_paths + [
@@ -405,14 +423,20 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
 
     # append include paths
     for path in include_paths:
-        cflags.append("-I{}".format(path.replace(":", "$:")))
-        cuda_cflags.append("-I{}".format(path.replace(":", "$:")))
+        inc = "-I{}".format(path.replace(":", "$:"))
+        cflags.append(inc)
+        cxxflags.append(inc)
+        cuda_cflags.append(inc)
 
-    # flags
+    # Classify sources by extension to determine which rules are needed
+    with_c = any(Path(s).suffix.lower() == ".c" for s in sources)
     ninja: list[str] = []
     ninja.append("ninja_required_version = 1.3")
     ninja.append("cxx = {}".format(os.environ.get("CXX", "cl" if IS_WINDOWS else "c++")))
-    ninja.append("cflags = {}".format(" ".join(cflags)))
+    ninja.append("cxxflags = {}".format(" ".join(cxxflags)))
+    if with_c:
+        ninja.append("cc = {}".format(os.environ.get("CC", "cl" if IS_WINDOWS else "cc")))
+        ninja.append("cflags = {}".format(" ".join(cflags)))
     if with_backend:
         if with_hip:
             ninja.append("nvcc = {}".format(str(Path(_find_rocm_home()) / "bin" / "hipcc")))
@@ -425,13 +449,24 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
     ninja.append("")
     ninja.append("rule compile")
     if IS_WINDOWS:
-        ninja.append("  command = $cxx /showIncludes $cflags -c $in /Fo$out")
+        ninja.append("  command = $cxx /showIncludes $cxxflags -c $in /Fo$out")
         ninja.append("  deps = msvc")
     else:
         ninja.append("  depfile = $out.d")
         ninja.append("  deps = gcc")
-        ninja.append("  command = $cxx -MMD -MF $out.d $cflags -c $in -o $out")
+        ninja.append("  command = $cxx -MMD -MF $out.d $cxxflags -c $in -o $out")
     ninja.append("")
+
+    if with_c:
+        ninja.append("rule c_compile")
+        if IS_WINDOWS:
+            ninja.append("  command = $cc /showIncludes $cflags -c $in /Fo$out")
+            ninja.append("  deps = msvc")
+        else:
+            ninja.append("  depfile = $out.d")
+            ninja.append("  deps = gcc")
+            ninja.append("  command = $cc -MMD -MF $out.d $cflags -c $in -o $out")
+        ninja.append("")
 
     if with_backend:
         ninja.append("rule compile_cuda")
@@ -447,38 +482,62 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
 
     # Add rules for object merging and cubin embedding (Unix only)
     if not IS_WINDOWS:
-        if embed_cubin:
-            ninja.append("rule merge_objects")
-            ninja.append("  command = ld -r -o $out $in")
-            ninja.append("")
+        ninja.append("rule merge_objects")
+        ninja.append("  command = ld -r -o $out $in")
+        ninja.append("")
 
+        if embed_cubin:
             ninja.append("rule embed_cubin")
             ninja.append(
                 f"  command = {sys.executable} -m tvm_ffi.utils.embed_cubin --output-obj $out --input-obj $in --cubin $cubin --name $name"
             )
             ninja.append("")
 
-    ninja.append("rule link")
-    if IS_WINDOWS:
-        ninja.append("  command = $cxx $in /link $ldflags /out:$out")
-    else:
-        ninja.append("  command = $cxx $in $ldflags -o $out")
-    ninja.append("")
+    if not object_mode:
+        ninja.append("rule link")
+        if IS_WINDOWS:
+            ninja.append("  command = $cxx $in /link $ldflags /out:$out")
+        else:
+            ninja.append("  command = $cxx $in $ldflags -o $out")
+        ninja.append("")
 
-    # build targets
+    # build targets — dispatch by file extension
     obj_files: list[str] = []
-    for i, cpp_path in enumerate(sorted(cpp_files)):
-        obj_name = f"cpp_{i}.o"
-        ninja.append("build {}: compile {}".format(obj_name, cpp_path.replace(":", "$:")))
-        obj_files.append(obj_name)
+    c_idx = cpp_idx = cuda_idx = 0
+    for src in sorted(sources):
+        ext = Path(src).suffix.lower()
+        escaped = src.replace(":", "$:")
+        if ext in (".o", ".obj"):
+            # Pre-compiled object file: pass directly to linker
+            obj_files.append(escaped)
+        elif ext == ".c":
+            obj_name = f"c_{c_idx}.o"
+            ninja.append(f"build {obj_name}: c_compile {escaped}")
+            obj_files.append(obj_name)
+            c_idx += 1
+        elif ext == ".cu":
+            obj_name = f"cuda_{cuda_idx}.o"
+            ninja.append(f"build {obj_name}: compile_cuda {escaped}")
+            obj_files.append(obj_name)
+            cuda_idx += 1
+        else:
+            # .cc, .cpp, .cxx — default to C++ compilation
+            obj_name = f"cpp_{cpp_idx}.o"
+            ninja.append(f"build {obj_name}: compile {escaped}")
+            obj_files.append(obj_name)
+            cpp_idx += 1
 
-    for i, cuda_path in enumerate(sorted(cuda_files)):
-        obj_name = f"cuda_{i}.o"
-        ninja.append("build {}: compile_cuda {}".format(obj_name, cuda_path.replace(":", "$:")))
-        obj_files.append(obj_name)
-
-    # Use appropriate extension based on platform
-    ext = ".dll" if IS_WINDOWS else ".so"
+    if object_mode:
+        # Object-only output: merge all object files into the target.
+        if not IS_WINDOWS:
+            ninja.append(f"build {output_name}: merge_objects {' '.join(obj_files)}")
+            ninja.append("")
+            ninja.append(f"default {output_name}")
+        else:
+            # Windows: no ld -r available; default to the first intermediate object
+            ninja.append(f"default {obj_files[0]}")
+        ninja.append("")
+        return "\n".join(ninja)
 
     # For Unix systems with embed_cubin, use a 3-step process:
     # 1. Merge all object files into a unified object file
@@ -507,16 +566,16 @@ def _generate_ninja_build(  # noqa: PLR0915, PLR0912
             current_obj = next_obj
 
         # Step 3: Link the final object file
-        ninja.append(f"build {name}{ext}: link {current_obj}")
+        ninja.append(f"build {output_name}: link {current_obj}")
         ninja.append("")
     else:
-        # Original behavior: directly link object files (for Windows or no cubin embedding)
+        # Directly link object files (for Windows or no cubin embedding)
         link_files_str = " ".join(obj_files)
-        ninja.append(f"build {name}{ext}: link {link_files_str}")
+        ninja.append(f"build {output_name}: link {link_files_str}")
         ninja.append("")
 
     # default target
-    ninja.append(f"default {name}{ext}")
+    ninja.append(f"default {output_name}")
     ninja.append("")
     return "\n".join(ninja)
 
@@ -595,8 +654,7 @@ def _str_seq2list(seq: Sequence[str] | str | None) -> list[str]:
 
 def _build_impl(  # noqa: PLR0913
     name: str,
-    cpp_files: Sequence[str] | str | None,
-    cuda_files: Sequence[str] | str | None,
+    sources: Sequence[str] | str | None,
     extra_cflags: Sequence[str] | None,
     extra_cuda_cflags: Sequence[str] | None,
     extra_ldflags: Sequence[str] | None,
@@ -605,16 +663,15 @@ def _build_impl(  # noqa: PLR0913
     need_lock: bool = True,
     embed_cubin: Mapping[str, bytes] | None = None,
     backend: str | None = None,
+    output: str | None = None,
 ) -> str:
     """Real implementation of build function."""
     # need to resolve the path to make it unique
-    cpp_path_list = [str(Path(p).resolve()) for p in _str_seq2list(cpp_files)]
-    cuda_path_list = [str(Path(p).resolve()) for p in _str_seq2list(cuda_files)]
-    with_cpp = bool(cpp_path_list)
-    with_backend = bool(cuda_path_list)
-    assert with_cpp or with_backend, "Either cpp_files or cuda_files must be provided."
+    source_path_list = [str(Path(p).resolve()) for p in _str_seq2list(sources)]
+    assert source_path_list, "sources must be provided."
 
-    resolved_backend = _resolve_gpu_backend(backend) if with_backend else None
+    has_cuda = any(Path(p).suffix.lower() == ".cu" for p in source_path_list)
+    resolved_backend = _resolve_gpu_backend(backend) if has_cuda else None
     extra_ldflags_list = list(extra_ldflags) if extra_ldflags is not None else []
     extra_cflags_list = list(extra_cflags) if extra_cflags is not None else []
     extra_cuda_cflags_list = list(extra_cuda_cflags) if extra_cuda_cflags is not None else []
@@ -626,8 +683,8 @@ def _build_impl(  # noqa: PLR0913
         source_hash: str = _hash_sources(
             None,
             None,
-            cpp_path_list,
-            cuda_path_list,
+            source_path_list,
+            None,
             {},
             extra_cflags_list,
             extra_cuda_cflags_list,
@@ -658,10 +715,10 @@ def _build_impl(  # noqa: PLR0913
         extra_cuda_cflags=extra_cuda_cflags_list,
         extra_ldflags=extra_ldflags_list,
         extra_include_paths=extra_include_paths_list,
-        cpp_files=cpp_path_list,
-        cuda_files=cuda_path_list,
+        sources=source_path_list,
         embed_cubin=embed_cubin,
         backend=resolved_backend,
+        output=output,
     )
 
     # may not hold lock when build_directory is specified, prevent deadlock
@@ -670,9 +727,26 @@ def _build_impl(  # noqa: PLR0913
         _maybe_write(str(build_dir / "build.ninja"), ninja_source)
         # build the module
         build_ninja(str(build_dir))
-        # Use appropriate extension based on platform
-        ext = ".dll" if IS_WINDOWS else ".so"
-        return str((build_dir / f"{name}{ext}").resolve())
+        # Determine the output filename (mirrors _generate_ninja_build logic)
+        if output is not None:
+            out_ext = Path(output).suffix.lower()
+            object_mode = out_ext in (".o", ".obj")
+            output_name = Path(output).name
+        else:
+            object_mode = False
+            output_name = f"{name}{'.dll' if IS_WINDOWS else '.so'}"
+        if object_mode and IS_WINDOWS:
+            # Windows has no ld -r; the actual target is the first intermediate object.
+            # The name must match _generate_ninja_build: c_0.o / cpp_0.o / cuda_0.o.
+            first_ext = Path(sorted(source_path_list)[0]).suffix.lower() if source_path_list else ""
+            if first_ext == ".c":
+                obj_name = "c_0.o"
+            elif first_ext == ".cu":
+                obj_name = "cuda_0.o"
+            else:
+                obj_name = "cpp_0.o"
+            return str((build_dir / obj_name).resolve())
+        return str((build_dir / output_name).resolve())
 
 
 def build_inline(  # noqa: PLR0913
@@ -688,12 +762,15 @@ def build_inline(  # noqa: PLR0913
     build_directory: str | None = None,
     embed_cubin: Mapping[str, bytes] | None = None,
     backend: str | None = None,
+    output: str | None = None,
 ) -> str:
     """Compile and build a C++/CUDA module from inline source code.
 
-    This function compiles the given C++ and/or CUDA source code into a shared library. Both ``cpp_sources`` and
-    ``cuda_sources`` are compiled to an object file, and then linked together into a shared library. It's possible to only
-    provide cpp_sources or cuda_sources. The path to the compiled shared library is returned.
+    This function compiles the given C++ and/or CUDA source code into a shared library or object file.
+    Both ``cpp_sources`` and ``cuda_sources`` are compiled to an object file. When ``output`` is
+    ``None`` (the default) or has a shared-library extension (``.so``, ``.dll``), object files are
+    linked into a shared library. When ``output`` has an object-file extension (``.o``, ``.obj``),
+    linking is skipped and the path to the object file is returned directly.
 
     The ``functions`` parameter is used to specify which functions in the source code should be exported to the tvm ffi
     module. It can be a mapping, a sequence, or a single string. When a mapping is given, the keys are the names of the
@@ -766,10 +843,16 @@ def build_inline(  # noqa: PLR0913
         The GPU backend to use. It can be "cuda" or "hip".
         If not specified, the backend will be automatically determined based on the available GPU and the provided source code.
 
+    output
+        Output filename that determines the build type from its extension. When ``None``
+        (the default), builds a shared library (``.so`` on Unix, ``.dll`` on Windows).
+        Use an object-file extension (e.g., ``"hello.o"``) to skip linking and produce
+        a relocatable object file. The file is placed in the build directory.
+
     Returns
     -------
-    lib_path: str
-        The path to the built shared library.
+    path: str
+        The path to the built shared library or object file.
 
     Example
     -------
@@ -874,10 +957,14 @@ def build_inline(  # noqa: PLR0913
         if with_backend:
             _maybe_write(cuda_file, cuda_source)
 
+        src_files = []
+        if with_cpp:
+            src_files.append(cpp_file)
+        if with_backend:
+            src_files.append(cuda_file)
         return _build_impl(
             name=name,
-            cpp_files=[cpp_file] if with_cpp else [],
-            cuda_files=[cuda_file] if with_backend else [],
+            sources=src_files,
             extra_cflags=extra_cflags_list,
             extra_cuda_cflags=extra_cuda_cflags_list,
             extra_ldflags=extra_ldflags_list,
@@ -886,6 +973,7 @@ def build_inline(  # noqa: PLR0913
             need_lock=False,  # already hold the lock
             embed_cubin=embed_cubin,
             backend=backend,
+            output=output,
         )
 
 
@@ -1049,9 +1137,10 @@ def load_inline(  # noqa: PLR0913
     )
 
 
-def build(
+def build(  # noqa: PLR0913
     name: str,
     *,
+    sources: Sequence[str] | str | None = None,
     cpp_files: Sequence[str] | str | None = None,
     cuda_files: Sequence[str] | str | None = None,
     extra_cflags: Sequence[str] | None = None,
@@ -1060,12 +1149,20 @@ def build(
     extra_include_paths: Sequence[str] | None = None,
     build_directory: str | None = None,
     backend: str | None = None,
+    output: str | None = None,
 ) -> str:
-    """Compile and build a C++/CUDA module from source files.
+    """Compile and build a C/C++/CUDA module from source files.
 
-    This function compiles the given C++ and/or CUDA source files into a shared library. Both ``cpp_files`` and
-    ``cuda_files`` are compiled to object files, and then linked together into a shared library. It's possible to only
-    provide cpp_files or cuda_files. The path to the compiled shared library is returned.
+    This function compiles the given C, C++, and/or CUDA source files into a shared library or
+    object file. The compiler is selected automatically based on file extension:
+
+    - ``.c`` — compiled with the C compiler (``$CC``)
+    - ``.cc``, ``.cpp``, ``.cxx`` — compiled with the C++ compiler (``$CXX``)
+    - ``.o``, ``.obj`` — pre-compiled objects, passed directly to the linker
+
+    When ``output`` is ``None`` (the default) or has a shared-library extension, object files are
+    linked into a shared library. When ``output`` has an object-file extension (``.o``, ``.obj``),
+    linking is skipped and the path to the object file is returned.
 
     Note that this function does not automatically export functions to the tvm ffi module. You need to
     manually use the TVM FFI export macros (e.g., ``TVM_FFI_DLL_EXPORT_TYPED_FUNC``) in your source files to export
@@ -1084,22 +1181,34 @@ def build(
     The default cache directory can be specified via the `TVM_FFI_CACHE_DIR` environment variable. If not specified,
     the default cache directory is ``~/.cache/tvm-ffi``.
 
+    The C compiler is controlled by the ``$CC`` environment variable (default: ``cc`` on Unix, ``cl`` on Windows).
+    The C++ compiler is controlled by the ``$CXX`` environment variable (default: ``c++`` on Unix, ``cl`` on Windows).
+
     Parameters
     ----------
     name
         The name of the tvm ffi module.
+    sources
+        Source files to compile. The compiler is auto-detected from the file extension:
+
+        - ``.c`` → C compiler (``$CC``)
+        - ``.cc``, ``.cpp``, ``.cxx`` → C++ compiler (``$CXX``)
+        - ``.cu`` → CUDA/HIP compiler (``nvcc`` or ``hipcc``)
+        - ``.o``, ``.obj`` → pre-compiled objects, passed directly to the linker
+
+        It can be a list of file paths or a single file path.
     cpp_files
-        The C++ source files to compile. It can be a list of file paths or a single file path. Both absolute and
-        relative paths are supported.
+        Alias for ``sources``, kept for backward compatibility.
     cuda_files
-        The CUDA source files to compile. It can be a list of file paths or a single file path. Both absolute and
-        relative paths are supported.
+        Alias for ``sources``, kept for backward compatibility.
     extra_cflags
-        The extra compiler flags for C++ compilation.
-        The default flags are:
+        Extra compiler flags applied to both C and C++ compilation.
+        The C++ default flags are:
 
         - On Linux/macOS: ['-std=c++17', '-fPIC', '-O2']
         - On Windows: ['/std:c++17', '/MD', '/O2']
+
+        The C default flags omit ``-std=c++17`` and ``/EHsc``.
 
     extra_cuda_cflags
         The extra compiler flags for CUDA compilation.
@@ -1127,10 +1236,16 @@ def build(
         The GPU backend to use. It can be "cuda" or "hip".
         If not specified, the backend will be automatically determined based on the available GPU and the provided source code.
 
+    output
+        Output filename that determines the build type from its extension. When ``None``
+        (the default), builds a shared library (``.so`` on Unix, ``.dll`` on Windows).
+        Use an object-file extension (e.g., ``"my_ops.o"``) to skip linking and produce
+        a relocatable object file. The file is placed in the build directory.
+
     Returns
     -------
-    lib_path: str
-        The path to the built shared library.
+    path: str
+        The path to the built shared library or object file.
 
     Example
     -------
@@ -1167,7 +1282,7 @@ def build(
         # compile the cpp source file and get the library path
         lib_path: str = tvm_ffi.cpp.build(
             name="my_ops",
-            cpp_files="my_ops.cpp",
+            sources="my_ops.cpp",
         )
 
         # load the module
@@ -1180,10 +1295,11 @@ def build(
         torch.testing.assert_close(x + 1, y)
 
     """
+    # Merge sources, cpp_files, and cuda_files (backward compat aliases)
+    merged = _str_seq2list(sources) + _str_seq2list(cpp_files) + _str_seq2list(cuda_files)
     return _build_impl(
         name=name,
-        cpp_files=cpp_files,
-        cuda_files=cuda_files,
+        sources=merged or None,
         extra_cflags=extra_cflags,
         extra_cuda_cflags=extra_cuda_cflags,
         extra_ldflags=extra_ldflags,
@@ -1191,12 +1307,14 @@ def build(
         build_directory=build_directory,
         need_lock=True,
         backend=backend,
+        output=output,
     )
 
 
-def load(
+def load(  # noqa: PLR0913
     name: str,
     *,
+    sources: Sequence[str] | str | None = None,
     cpp_files: Sequence[str] | str | None = None,
     cuda_files: Sequence[str] | str | None = None,
     extra_cflags: Sequence[str] | None = None,
@@ -1207,11 +1325,10 @@ def load(
     keep_module_alive: bool = True,
     backend: str | None = None,
 ) -> Module:
-    """Compile, build and load a C++/CUDA module from source files.
+    """Compile, build and load a C/C++/CUDA module from source files.
 
-    This function compiles the given C++ and/or CUDA source files into a shared library and loads it as a tvm ffi
-    module. Both ``cpp_files`` and ``cuda_files`` are compiled to object files, and then linked together into a shared
-    library. It's possible to only provide cpp_files or cuda_files.
+    This function compiles the given source files into a shared library and loads it as a tvm ffi
+    module. The compiler is selected automatically based on file extension.
 
     Note that this function does not automatically export functions to the tvm ffi module. You need to
     manually use the TVM FFI export macros (e.g., :c:macro:`TVM_FFI_DLL_EXPORT_TYPED_FUNC`) in your source files to export
@@ -1234,12 +1351,14 @@ def load(
     ----------
     name
         The name of the tvm ffi module.
+    sources
+        Source files to compile. The compiler is auto-detected from the file extension:
+        ``.c`` → C, ``.cc``/``.cpp``/``.cxx`` → C++, ``.cu`` → CUDA/HIP,
+        ``.o``/``.obj`` → linker passthrough. It can be a list of file paths or a single file path.
     cpp_files
-        The C++ source files to compile. It can be a list of file paths or a single file path. Both absolute and
-        relative paths are supported.
+        Alias for ``sources``, kept for backward compatibility.
     cuda_files
-        The CUDA source files to compile. It can be a list of file paths or a single file path. Both absolute and
-        relative paths are supported.
+        Alias for ``sources``, kept for backward compatibility.
     extra_cflags
         The extra compiler flags for C++ compilation.
         The default flags are:
@@ -1321,7 +1440,7 @@ def load(
         # compile the cpp source file and load the module
         mod: Module = tvm_ffi.cpp.load(
             name="my_ops",
-            cpp_files="my_ops.cpp",
+            sources="my_ops.cpp",
         )
 
         # use the function from the loaded module
@@ -1334,6 +1453,7 @@ def load(
     return load_module(
         build(
             name=name,
+            sources=sources,
             cpp_files=cpp_files,
             cuda_files=cuda_files,
             extra_cflags=extra_cflags,
