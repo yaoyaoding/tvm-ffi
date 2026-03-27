@@ -14,17 +14,18 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Auto-build test objects for all available compiler variants.
+"""Build test object files for all available compiler variants.
 
-Uses tvm_ffi.cpp.build to compile C/C++ test sources to object files.
-Detects platform and available compilers:
-  Linux:   LLVM Clang (default) + GCC
-  macOS:   LLVM Clang (default) + Apple Clang
-  Windows: LLVM Clang (default) + MSVC + clang-cl
+Uses ``tvm_ffi.cpp.build`` to compile C/C++ test sources to relocatable
+object files.  Detects platform and available compilers:
 
-Objects are placed under the test directory (c/, cc/, c-gcc/, etc.) and
-skipped if they already exist.  LLVM clang is found via ``$LLVM_PREFIX/bin``
-or ``$PATH``; no hardcoded install path is assumed.
+- Linux:   LLVM Clang (default) + GCC
+- macOS:   LLVM Clang (default) + Apple Clang
+- Windows: LLVM Clang (default) + MSVC + clang-cl
+
+Objects are placed under a temporary directory and skipped if they already
+exist.  LLVM clang is found via ``$LLVM_PREFIX/bin`` or ``$PATH``; no
+hardcoded install path is assumed.
 """
 
 from __future__ import annotations
@@ -32,14 +33,16 @@ from __future__ import annotations
 import os
 import platform
 import shutil
+import tempfile
 from pathlib import Path
 
-import pytest
 import tvm_ffi.cpp
 
-TESTS_DIR = Path(__file__).resolve().parent
-SOURCES_C = TESTS_DIR / "sources" / "c"
-SOURCES_CC = TESTS_DIR / "sources" / "cc"
+SOURCES_DIR = Path(__file__).resolve().parent / "sources"
+SOURCES_C = SOURCES_DIR / "c"
+SOURCES_CC = SOURCES_DIR / "cc"
+
+_DEFAULT_OUT_DIR = Path(tempfile.gettempdir()) / "tvm_ffi_orcjit_tests"
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +116,7 @@ def _build_variant(
 
 
 # ---------------------------------------------------------------------------
-# Platform detection and variant dispatch
+# Compiler detection
 # ---------------------------------------------------------------------------
 
 
@@ -122,18 +125,15 @@ def _find_llvm_clang() -> tuple[str, str] | None:
 
     Returns (clang, clang++) paths, or None if not found.
     """
-    # 1. Explicit LLVM_PREFIX
     llvm_prefix = os.environ.get("LLVM_PREFIX")
     if llvm_prefix:
         p = Path(llvm_prefix)
-        # conda-style layout: Library/bin on Windows
         bin_dir = p / "Library" / "bin" if (p / "Library" / "bin").exists() else p / "bin"
         cc = bin_dir / ("clang.exe" if platform.system() == "Windows" else "clang")
         if cc.exists():
             cxx = bin_dir / ("clang++.exe" if platform.system() == "Windows" else "clang++")
             return str(cc), str(cxx)
 
-    # 2. Find clang in PATH
     cc = shutil.which("clang")
     if cc:
         cxx = shutil.which("clang++")
@@ -142,8 +142,22 @@ def _find_llvm_clang() -> tuple[str, str] | None:
     return None
 
 
-def _build_all_variants() -> None:
-    """Detect platform and build every applicable compiler variant."""
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def build_test_objects(out_dir: Path | None = None) -> Path:
+    """Build test objects for all available compiler variants.
+
+    Objects are placed under *out_dir* (default:
+    ``{tempdir}/tvm_ffi_orcjit_tests``).  Already-built objects are
+    skipped.  Returns the output directory.
+    """
+    if out_dir is None:
+        out_dir = _DEFAULT_OUT_DIR
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     system = platform.system()
     extra = _extra_cflags()
 
@@ -156,8 +170,8 @@ def _build_all_variants() -> None:
                 cc=clang,
                 cxx=clangxx,
                 extra_cflags=extra,
-                c_outdir=TESTS_DIR / "c",
-                cc_outdir=TESTS_DIR / "cc",
+                c_outdir=out_dir / "c",
+                cc_outdir=out_dir / "cc",
             )
         if system == "Linux" and shutil.which("gcc"):
             _build_variant(
@@ -165,8 +179,8 @@ def _build_all_variants() -> None:
                 cc="gcc",
                 cxx="g++",
                 extra_cflags=extra,
-                c_outdir=TESTS_DIR / "c-gcc",
-                cc_outdir=TESTS_DIR / "cc-gcc",
+                c_outdir=out_dir / "c-gcc",
+                cc_outdir=out_dir / "cc-gcc",
             )
         if system == "Darwin" and Path("/usr/bin/clang").exists():
             _build_variant(
@@ -174,16 +188,13 @@ def _build_all_variants() -> None:
                 cc="/usr/bin/clang",
                 cxx="/usr/bin/clang++",
                 extra_cflags=extra,
-                c_outdir=TESTS_DIR / "c-appleclang",
-                cc_outdir=TESTS_DIR / "cc-appleclang",
+                c_outdir=out_dir / "c-appleclang",
+                cc_outdir=out_dir / "cc-appleclang",
             )
 
     elif system == "Windows":
-        # On Windows, tvm_ffi.cpp.build generates MSVC-style ninja rules, so we
-        # must use MSVC-compatible compilers (cl or clang-cl), not GNU-style clang.
         llvm = _find_llvm_clang()
         if llvm:
-            # Use clang-cl from LLVM_PREFIX (MSVC-compatible LLVM driver)
             clang_cl = Path(llvm[0]).parent / "clang-cl.exe"
             if clang_cl.exists():
                 _build_variant(
@@ -191,7 +202,7 @@ def _build_all_variants() -> None:
                     cc=str(clang_cl),
                     cxx=None,
                     extra_cflags=["/GS-"],
-                    c_outdir=TESTS_DIR / "c",
+                    c_outdir=out_dir / "c",
                     cc_outdir=None,
                 )
         if shutil.which("cl"):
@@ -200,7 +211,7 @@ def _build_all_variants() -> None:
                 cc="cl",
                 cxx=None,
                 extra_cflags=["/GS-"],
-                c_outdir=TESTS_DIR / "c-msvc",
+                c_outdir=out_dir / "c-msvc",
                 cc_outdir=None,
             )
         if shutil.which("clang-cl"):
@@ -209,17 +220,8 @@ def _build_all_variants() -> None:
                 cc="clang-cl",
                 cxx=None,
                 extra_cflags=["/GS-"],
-                c_outdir=TESTS_DIR / "c-clang-cl",
+                c_outdir=out_dir / "c-clang-cl",
                 cc_outdir=None,
             )
 
-
-# ---------------------------------------------------------------------------
-# Pytest hook — runs before test collection so that _discover_variants() in
-# test modules can find the compiled objects.
-# ---------------------------------------------------------------------------
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Build test objects for all available compiler variants."""
-    _build_all_variants()
+    return out_dir

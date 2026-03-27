@@ -110,7 +110,13 @@ jobs:
           CIBW_TEST_REQUIRES: pytest ninja
           CIBW_TEST_COMMAND: >-
             pip install --force-reinstall {project} &&
-            python {project}/addons/tvm_ffi_orcjit/tests/run_all_tests.py
+            pytest {project}/addons/tvm_ffi_orcjit/tests -v &&
+            python {project}/addons/tvm_ffi_orcjit/examples/quick-start/run.py --lang cpp &&
+            python {project}/addons/tvm_ffi_orcjit/examples/quick-start/run.py --lang c
+          CIBW_TEST_COMMAND_WINDOWS: >-
+            pip install --force-reinstall {project} &&
+            pytest {project}/addons/tvm_ffi_orcjit/tests -v &&
+            python {project}/addons/tvm_ffi_orcjit/examples/quick-start/run.py --lang c
 
       - uses: actions/upload-artifact@v4
         with:

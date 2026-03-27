@@ -27,11 +27,13 @@ import tvm_ffi
 from tvm_ffi_orcjit import ExecutionSession
 from tvm_ffi_orcjit.dylib import DynamicLibrary
 
+from utils import build_test_objects
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-TEST_DIR = Path(__file__).parent
+OBJ_DIR = build_test_objects()
 
 _KNOWN_SUBDIRS = [
     "cc",
@@ -47,7 +49,7 @@ _KNOWN_SUBDIRS = [
 
 def obj(name: str) -> str:
     """Return path to a pre-built test object file, or skip if missing."""
-    path = TEST_DIR / f"{name}.o"
+    path = OBJ_DIR / f"{name}.o"
     if not path.exists():
         pytest.skip(f"{path.name} not found (not built)")
     return str(path)
@@ -125,7 +127,7 @@ class Variant:
 
 
 def _discover_variants() -> list[Variant]:
-    return [Variant(s) for s in _KNOWN_SUBDIRS if (TEST_DIR / s / "test_funcs.o").exists()]
+    return [Variant(s) for s in _KNOWN_SUBDIRS if (OBJ_DIR / s / "test_funcs.o").exists()]
 
 
 _all_variants = _discover_variants()

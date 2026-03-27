@@ -19,21 +19,18 @@
 
 ## Quick Start
 
-Run pytest directly — default test objects (c/, cc/) are auto-built by
-`conftest.py` using `tvm_ffi.cpp.build`:
+Run pytest directly — test objects are auto-built by `utils.build_test_objects()`
+into a temporary directory using `tvm_ffi.cpp.build`:
 
 ```bash
 pytest tests/ -v
 ```
 
-### Full CI run (pytest + quick-start)
+Run the quick-start example:
 
 ```bash
-python tests/run_all_tests.py
+python examples/quick-start/run.py --lang c
 ```
-
-This runs pytest (which auto-builds objects for all available compiler variants
-via `conftest.py`) and runs the quick-start examples.
 
 ### Alternative: cmake-based build
 
@@ -74,16 +71,13 @@ tests/
     c/          C source files (.c)
     cc/         C++ source files (.cc)
     cuda/       CUDA source files (optional)
-  c/            Installed C objects (default compiler)
-  cc/           Installed C++ objects (default compiler)
-  c-gcc/        Installed C objects (GCC variant)
-  cc-gcc/       Installed C++ objects (GCC variant)
-  ...           Other compiler variant directories
-  conftest.py           Auto-builds all compiler variant objects via tvm_ffi.cpp.build
-  run_all_tests.py      CI entry point (pytest + quick-start)
+  utils.py              Build helpers (compile sources to objects in /tmp)
   test_basic.py         Python test cases
   CMakeLists.txt        Alternative cmake build
 ```
+
+Built objects are placed in `{tempdir}/tvm_ffi_orcjit_tests/` with per-compiler
+variant subdirectories (c/, cc/, c-gcc/, etc.).
 
 ### Source files
 
@@ -111,5 +105,5 @@ static initialization and finalization:
 
 ## CI
 
-The CI workflow (`.github/workflows/tvm_ffi_orcjit.yml`) runs `run_all_tests.py`
-via `cibuildwheel`, which builds objects and runs all tests in a single step.
+The CI workflow (`.github/workflows/tvm_ffi_orcjit.yml`) runs `pytest` and the
+quick-start example via `cibuildwheel`.
