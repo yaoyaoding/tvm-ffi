@@ -15,10 +15,10 @@
 <!--- specific language governing permissions and limitations -->
 <!--- under the License. -->
 
-# ORC JIT v2 Primer — Background for the `tvm-ffi-orcjit` Addon
+# ORC JIT v2 Primer — Background for the `tvm_ffi_orcjit` Addon
 
 This document explains the background knowledge needed to understand the
-`tvm-ffi-orcjit` addon: object file formats, the classical linker model, and LLVM's
+`tvm_ffi_orcjit` addon: object file formats, the classical linker model, and LLVM's
 ORC JIT v2 architecture. It then maps those concepts onto the addon's implementation.
 
 ---
@@ -98,7 +98,7 @@ them as arrays of function pointers in special sections:
 
 The linker or OS loader is responsible for iterating these arrays and calling each pointer
 in priority order before handing control to user code. A JIT that loads `.o` files must
-replicate this behavior itself — this is a key responsibility of `tvm-ffi-orcjit`.
+replicate this behavior itself — this is a key responsibility of `tvm_ffi_orcjit`.
 
 ---
 
@@ -201,7 +201,7 @@ ExecutionSession
 - Configures the linking pipeline (see below).
 - Exposes `addObjectFile()`, `addIRModule()`, and `lookup()`.
 
-`LLJIT` is what `tvm-ffi-orcjit` wraps in `ORCJITExecutionSessionObj`.
+`LLJIT` is what `tvm_ffi_orcjit` wraps in `ORCJITExecutionSessionObj`.
 
 #### MaterializationUnit and MaterializationResponsibility
 
@@ -251,7 +251,7 @@ addObjectFile(buffer)
 5. **Finalizes** by writing machine code into the allocated pages and marking them
    executable.
 
-The pass pipeline is where `tvm-ffi-orcjit`'s `InitFiniPlugin` does its work.
+The pass pipeline is where `tvm_ffi_orcjit`'s `InitFiniPlugin` does its work.
 
 ### 3.2 Symbol Lookup and Resolution
 
@@ -265,7 +265,7 @@ When `session.lookup(search_order, symbol_name)` is called:
 5. Return the address.
 ```
 
-Symbol names are **mangled** (C++ name mangling) or explicitly prefixed. `tvm-ffi-orcjit`
+Symbol names are **mangled** (C++ name mangling) or explicitly prefixed. `tvm_ffi_orcjit`
 uses the `__tvm_ffi_` prefix to namespace exported functions.
 
 ### 3.3 DefinitionGenerators
@@ -278,7 +278,7 @@ definition — typically by looking up a symbol in the host process or another l
 dylib, which resolves symbols like `malloc`, `printf`, or any C runtime function by
 looking them up in the running process.
 
-On Windows, `tvm-ffi-orcjit` adds a custom `DLLImportDefinitionGenerator` that handles
+On Windows, `tvm_ffi_orcjit` adds a custom `DLLImportDefinitionGenerator` that handles
 `__imp_XXX` import stubs that MSVC-compiled objects expect.
 
 ### 3.4 Platform Support
@@ -318,7 +318,7 @@ The three platform objects in LLVM are:
 `ExecutorNativePlatform` is a convenience builder that auto-selects the right platform
 for the host OS and loads the ORC runtime from a given path.
 
-#### How `tvm-ffi-orcjit` Uses (or Avoids) ORC Platforms
+#### How `tvm_ffi_orcjit` Uses (or Avoids) ORC Platforms
 
 The addon takes a different approach on each platform:
 
@@ -336,7 +336,7 @@ The addon takes a different approach on each platform:
 
 ---
 
-## 4. How `tvm-ffi-orcjit` Uses ORC JIT v2
+## 4. How `tvm_ffi_orcjit` Uses ORC JIT v2
 
 With the background above, here is how the addon maps onto the concepts.
 

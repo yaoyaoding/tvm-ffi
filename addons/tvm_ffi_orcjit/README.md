@@ -55,7 +55,7 @@ Pure C objects using the `TVMFFISafeCallType` ABI work on all platforms.
 ### Install from PyPI
 
 ```bash
-pip install apache-tvm-ffi apache-tvm-ffi-orcjit
+pip install apache-tvm-ffi apache-tvm_ffi_orcjit
 ```
 
 ### Build from Source
@@ -93,7 +93,7 @@ cd tvm-ffi
 pip install -e .
 
 # Build and install the orcjit addon
-cd addons/tvm-ffi-orcjit
+cd addons/tvm_ffi_orcjit
 pip install -e .
 ```
 
@@ -205,7 +205,7 @@ Please refers to [ORCJIT_PRIMER.md](./ORCJIT_PRIMER.md) to learn more about obje
 ## Project Structure
 
 ```text
-tvm-ffi-orcjit/
+tvm_ffi_orcjit/
 ├── CMakeLists.txt              # Build configuration
 ├── pyproject.toml              # Python package metadata
 ├── src/ffi/
@@ -226,13 +226,13 @@ tvm-ffi-orcjit/
 
 Runs on Linux (x86_64, aarch64), macOS (arm64), Windows (AMD64) via
 `cibuildwheel`. Each platform builds test objects with multiple compilers
-and runs the full test suite. See `.github/workflows/tvm-ffi-orcjit.yml`.
+and runs the full test suite. See `.github/workflows/tvm_ffi_orcjit.yml`.
 
 ## Troubleshooting
 
 ### "Cannot find global function" error
 
-The shared library wasn't loaded. Reinstall: `pip install --force-reinstall apache-tvm-ffi-orcjit`
+The shared library wasn't loaded. Reinstall: `pip install --force-reinstall apache-tvm_ffi_orcjit`
 
 ### "Duplicate definition of symbol" error
 

@@ -22,7 +22,7 @@
  *
  * This file demonstrates how to export C functions using TVM-FFI's
  * C ABI (TVMFFISafeCallType) so they can be loaded dynamically at
- * runtime with tvm-ffi-orcjit.  No C++ runtime dependencies.
+ * runtime with tvm_ffi_orcjit.  No C++ runtime dependencies.
  */
 #include <tvm/ffi/c_api.h>
 

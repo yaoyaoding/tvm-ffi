@@ -21,7 +21,7 @@
  * Quick Start Example - Simple Math Functions
  *
  * This file demonstrates how to export C++ functions using TVM-FFI
- * so they can be loaded dynamically at runtime with tvm-ffi-orcjit.
+ * so they can be loaded dynamically at runtime with tvm_ffi_orcjit.
  */
 
 #include <tvm/ffi/function.h>

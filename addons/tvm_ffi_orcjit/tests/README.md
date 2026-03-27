@@ -111,5 +111,5 @@ static initialization and finalization:
 
 ## CI
 
-The CI workflow (`.github/workflows/tvm-ffi-orcjit.yml`) runs `run_all_tests.py`
+The CI workflow (`.github/workflows/tvm_ffi_orcjit.yml`) runs `run_all_tests.py`
 via `cibuildwheel`, which builds objects and runs all tests in a single step.

@@ -89,6 +89,6 @@ __all__ = ["DynamicLibrary", "ExecutionSession"]
 try:
     from importlib.metadata import version
 
-    __version__ = version("apache-tvm-ffi-orcjit")
+    __version__ = version("apache-tvm_ffi_orcjit")
 except Exception:
     __version__ = "0.0.0.dev0"

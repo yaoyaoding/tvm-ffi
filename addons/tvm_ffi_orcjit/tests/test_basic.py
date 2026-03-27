@@ -14,7 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Basic tests for tvm-ffi-orcjit functionality."""
+"""Basic tests for tvm_ffi_orcjit functionality."""
 
 from __future__ import annotations
 

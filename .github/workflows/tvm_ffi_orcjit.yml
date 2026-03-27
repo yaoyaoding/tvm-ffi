@@ -20,12 +20,12 @@ name: OrcJIT Build
 on:
   push:
     paths:
-      - "addons/tvm-ffi-orcjit/**"
-      - ".github/workflows/tvm-ffi-orcjit.yml"
+      - "addons/tvm_ffi_orcjit/**"
+      - ".github/workflows/tvm_ffi_orcjit.yml"
   pull_request:
     paths:
-      - "addons/tvm-ffi-orcjit/**"
-      - ".github/workflows/tvm-ffi-orcjit.yml"
+      - "addons/tvm_ffi_orcjit/**"
+      - ".github/workflows/tvm_ffi_orcjit.yml"
   workflow_dispatch:
 
 jobs:
@@ -95,7 +95,7 @@ jobs:
       - name: Build and test wheels
         uses: pypa/cibuildwheel@298ed2fb2c105540f5ed055e8a6ad78d82dd3a7e  # v3.3.1
         with:
-          package-dir: addons/tvm-ffi-orcjit
+          package-dir: addons/tvm_ffi_orcjit
           output-dir: wheelhouse
         env:
           CIBW_BUILD: ${{ matrix.build }}
@@ -110,7 +110,7 @@ jobs:
           CIBW_TEST_REQUIRES: pytest ninja
           CIBW_TEST_COMMAND: >-
             pip install --force-reinstall {project} &&
-            python {project}/addons/tvm-ffi-orcjit/tests/run_all_tests.py
+            python {project}/addons/tvm_ffi_orcjit/tests/run_all_tests.py
 
       - uses: actions/upload-artifact@v4
         with:

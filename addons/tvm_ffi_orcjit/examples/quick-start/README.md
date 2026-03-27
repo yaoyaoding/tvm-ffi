@@ -17,7 +17,7 @@
 
 # Quick Start Example
 
-Demonstrates basic usage of tvm-ffi-orcjit: compile functions to object files,
+Demonstrates basic usage of tvm_ffi_orcjit: compile functions to object files,
 load them into the ORC JIT at runtime, and call them from Python.
 
 ## Files
@@ -32,7 +32,7 @@ load them into the ORC JIT at runtime, and call them from Python.
 ## Prerequisites
 
 - Python 3.10+, C/C++ compiler
-- `apache-tvm-ffi` and `apache-tvm-ffi-orcjit` packages installed
+- `apache-tvm-ffi` and `apache-tvm_ffi_orcjit` packages installed
 
 ## Run
 
