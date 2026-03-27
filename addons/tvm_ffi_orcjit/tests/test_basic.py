@@ -20,13 +20,11 @@ from __future__ import annotations
 
 import sys
 import tempfile
-from pathlib import Path
 
 import pytest
 import tvm_ffi
 from tvm_ffi_orcjit import ExecutionSession
 from tvm_ffi_orcjit.dylib import DynamicLibrary
-
 from utils import build_test_objects
 
 # ---------------------------------------------------------------------------
