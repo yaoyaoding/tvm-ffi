@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import functools
 import inspect
 import json
 import sys
@@ -346,6 +347,16 @@ def init_ffi_api(namespace: str, target_module_name: str | None = None) -> None:
 __SENTINEL = object()
 
 
+@functools.lru_cache(maxsize=None)
+def _new_empty() -> Any:
+    return core._get_global_func("ffi.NewEmpty", False)
+
+
+def _ffi_alloc_empty(obj: Any, type_index: int) -> None:
+    if obj.__chandle__() == 0:
+        obj.__init_handle_by_constructor__(_new_empty(), type_index)
+
+
 def _make_init(type_cls: type, type_info: TypeInfo) -> Callable[..., None]:
     """Build a Python ``__init__`` that delegates to the C++ auto-generated ``__ffi_init__``.
 
@@ -354,6 +365,20 @@ def _make_init(type_cls: type, type_info: TypeInfo) -> Callable[..., None]:
     signature.  The ``__init__`` body is a trivial adapter — all validation
     (too many positional, duplicates, missing required, kw_only enforcement,
     unknown kwargs) is handled by C++.
+
+    When this generated ``__init__`` is called via ``super().__init__()`` from
+    a subclass (detected by ``type(self) is not type_cls`` with no arguments),
+    it allocates an empty zero-initialized FFI object of the correct child
+    type instead of forwarding to ``__ffi_init__``.  This supports the common
+    Python pattern::
+
+        @py_class(init=False)
+        class Child(Parent):
+            x: int
+
+            def __init__(self, x):
+                super().__init__()
+                self.x = x
     """
     sig = _make_init_signature(type_info)
     kwargs_obj = core.KWARGS
@@ -362,6 +387,10 @@ def _make_init(type_cls: type, type_info: TypeInfo) -> Callable[..., None]:
     if has_post_init:
 
         def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            actual_type_info = type(self).__tvm_ffi_type_info__
+            if not args and not kwargs and type_info is not actual_type_info:
+                _ffi_alloc_empty(self, actual_type_info.type_index)
+                return
             ffi_args: list[Any] = list(args)
             ffi_args.append(kwargs_obj)
             for key, val in kwargs.items():
@@ -373,6 +402,10 @@ def _make_init(type_cls: type, type_info: TypeInfo) -> Callable[..., None]:
     else:
 
         def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            actual_type_info = type(self).__tvm_ffi_type_info__
+            if not args and not kwargs and type_info is not actual_type_info:
+                _ffi_alloc_empty(self, actual_type_info.type_index)
+                return
             ffi_args: list[Any] = list(args)
             ffi_args.append(kwargs_obj)
             for key, val in kwargs.items():
@@ -532,6 +565,19 @@ def _install_init(cls: type, *, enabled: bool) -> None:
     ``__init__``.
     """
     if "__init__" in cls.__dict__:
+        if not enabled:
+            # Wrap user's __init__ to pre-allocate the C++ object so that
+            # field setters work immediately (the calloc'd object is valid:
+            # None for Any/ObjectRef fields, 0 for scalars).
+            user_init = cls.__dict__["__init__"]
+
+            @functools.wraps(user_init)
+            def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+                actual_type_info = type(self).__tvm_ffi_type_info__
+                _ffi_alloc_empty(self, actual_type_info.type_index)
+                user_init(self, *args, **kwargs)
+
+            setattr(cls, "__init__", __init__)
         return
     type_info: TypeInfo | None = getattr(cls, "__tvm_ffi_type_info__", None)
     if type_info is None:
