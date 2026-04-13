@@ -33,7 +33,11 @@ _SKIP_UNKNOWN_OBJECTS = False
 _T = TypeVar("_T", bound=type)
 
 
-def register_object(type_key: str | None = None) -> Callable[[_T], _T]:
+def register_object(
+    type_key: str | None = None,
+    *,
+    init: bool = True,
+) -> Callable[[_T], _T]:
     """Register object type.
 
     Parameters
@@ -41,6 +45,11 @@ def register_object(type_key: str | None = None) -> Callable[[_T], _T]:
     type_key
         The type key of the node. It requires ``type_key`` to be registered already
         on the C++ side. If not specified, the class name will be used.
+    init
+        If True (default), install ``__init__`` from the C++ ``__ffi_init__``
+        TypeAttrColumn when available, or a TypeError guard for ``Object``
+        subclasses that lack one.  Set to False when a subsequent decorator
+        (e.g. ``@c_class``) will handle ``__init__`` installation.
 
     Notes
     -----
@@ -76,6 +85,8 @@ def register_object(type_key: str | None = None) -> Callable[[_T], _T]:
         info = core._register_object_by_index(type_index, cls)
         _add_class_attrs(type_cls=cls, type_info=info)
         setattr(cls, "__tvm_ffi_type_info__", info)
+        if init:
+            _install_init(cls, info)
         return cls
 
     if isinstance(type_key, str):
@@ -339,6 +350,44 @@ def init_ffi_api(namespace: str, target_module_name: str | None = None) -> None:
         f = get_global_func(name)
         setattr(f, "__name__", fname)
         setattr(target_module, fname, f)
+
+
+def _install_init(cls: type, type_info: TypeInfo) -> None:
+    """Install ``__init__`` from the C++ ``__ffi_init__`` TypeAttrColumn.
+
+    Skipped if the class body already defines ``__init__``.
+    This ensures that ``register_object`` alone provides a working
+    constructor, maintaining the invariant that ``c_class`` is a full
+    alias of ``register_object`` + dunder installation.
+
+    When no ``__ffi_init__`` is available and the class is an ``Object``
+    subclass, a TypeError guard is installed to prevent segfaults from
+    uninitialised handles.
+    """
+    if "__init__" in cls.__dict__:
+        return
+    ffi_init = core._lookup_type_attr(type_info.type_index, "__ffi_init__")
+    if ffi_init is not None:
+        from ._dunder import _make_init  # noqa: PLC0415
+
+        cls.__init__ = _make_init(  # type: ignore[attr-defined]
+            cls,
+            type_info,
+            ffi_init=ffi_init,
+            inplace=False,
+        )
+    elif issubclass(cls, core.Object):
+        type_name = cls.__name__
+
+        def __init__(self: Any, *args: Any, **kwargs: Any) -> None:
+            raise TypeError(
+                f"`{type_name}` cannot be constructed directly. "
+                f"Define a custom __init__ or use a factory method."
+            )
+
+        __init__.__qualname__ = f"{cls.__qualname__}.__init__"
+        __init__.__module__ = cls.__module__
+        cls.__init__ = __init__  # type: ignore[attr-defined]
 
 
 def _add_class_attrs(type_cls: type, type_info: TypeInfo) -> type:
