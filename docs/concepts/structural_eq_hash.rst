@@ -396,7 +396,7 @@ The problem
 
    fun x → x + 1       should equal       fun y → y + 1
 
-Variables are not defined by their content like name. They
+Variables are not defined by their content, such as their name. They
 are defined by **where they are introduced** and **how they are used**.
 ``x`` and ``y`` above are interchangeable because they occupy the same
 binding position and are used in the same way.
