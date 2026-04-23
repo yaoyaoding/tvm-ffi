@@ -33,6 +33,18 @@ The behavior is controlled by two layers of annotation on
 This document explains what each annotation means, when to use it, and how
 they compose.
 
+.. note::
+
+   Structural equality and hashing **never call Python-level** ``__eq__``
+   or ``__hash__``.  ``structural_equal`` / ``structural_hash`` dispatch
+   entirely through a C++ walker driven by the kind metadata registered
+   via ``structural_eq=``; the Python ``a == b`` / ``hash(a)`` dunders
+   are independent (they default to pointer identity and handle address,
+   inherited from ``Object``).  To customize how a specific type
+   participates in *structural* comparison, register the
+   :ref:`sequal-shash` hooks described below — do **not** override
+   ``__eq__`` or ``__hash__``.
+
 
 Type-Level Annotation
 ---------------------
@@ -632,20 +644,125 @@ Use for:
 - **Any field that introduces names into scope**
 
 
-Custom Equality and Hashing
-----------------------------
+.. _sequal-shash:
 
-For types where the default field-by-field traversal is insufficient, you
-can register custom callbacks as type attributes:
+Custom Equality and Hashing: ``__s_equal__`` / ``__s_hash__``
+--------------------------------------------------------------
 
-- **``__s_equal__``** — custom equality logic
-- **``__s_hash__``** — custom hashing logic
+For types where the default field-by-field traversal is insufficient (for
+example, fields that need to be visited in a specific order, cross-field
+invariants, or sub-values that need a different ``def_region`` setting
+than the declarative field flags allow), you can register custom
+callbacks as **type attributes**:
 
-These are registered per type via ``EnsureTypeAttrColumn``. When present,
-they replace the default field iteration. The system still manages all
-kind-specific logic (``"dag"`` memoization, ``"var"`` mapping, etc.) — the
-custom callback only controls which sub-values to compare/hash and in what
-order.
+- ``__s_equal__`` — custom structural equality logic.
+- ``__s_hash__`` — custom structural hashing logic.
+
+These are the *only* supported way to override structural comparison.
+``structural_equal`` / ``structural_hash`` never consult Python
+``__eq__`` / ``__hash__`` — those dunders serve a separate purpose
+(``==`` and ``hash()``, which default to pointer identity).
+
+When either hook is registered, it replaces the default field iteration
+for that type.  All kind-specific machinery (``"dag"`` memoization,
+``"var"`` mapping, the pointer shortcut of ``"const-tree"``, etc.) is
+still managed by the framework — the custom callback only controls
+*which* sub-values are compared or hashed, *in what order*, and *with
+what* ``def_region`` flag.
+
+Signatures
+~~~~~~~~~~
+
+``__s_equal__``:
+
+.. code-block:: text
+
+   (self, other, eq_cb) -> bool
+
+   eq_cb(lhs, rhs, def_region: bool, field_name: str) -> bool
+
+``__s_hash__``:
+
+.. code-block:: text
+
+   (self, init_hash: int, hash_cb) -> int
+
+   hash_cb(value, init_hash: int, def_region: bool) -> int
+
+The ``def_region`` flag on each recursive call controls whether the
+sub-value is compared/hashed in a definition region (enabling new
+variable bindings, just like ``field(structural_eq="def")``).  The
+``field_name`` argument on ``eq_cb`` is used only for mismatch path
+reporting from :py:func:`~tvm_ffi.get_first_structural_mismatch`.
+
+Example (Python)
+~~~~~~~~~~~~~~~~
+
+.. code-block:: python
+
+   @py_class(structural_eq="tree")
+   class Lambda(Object):
+       params: list
+       body: Any
+       comment: str  # not part of identity, but also not iterated below
+
+       def __s_equal__(self, other, eq_cb):
+           # params is a definition region; body is not.
+           if not eq_cb(self.params, other.params, True, "params"):
+               return False
+           if not eq_cb(self.body, other.body, False, "body"):
+               return False
+           return True
+
+       def __s_hash__(self, init_hash, hash_cb):
+           h = hash_cb(self.params, init_hash, True)
+           h = hash_cb(self.body, h, False)
+           return h
+
+The two methods must agree: if ``__s_equal__`` considers two instances
+equal, ``__s_hash__`` must produce the same hash for them.
+
+Example (C++)
+~~~~~~~~~~~~~
+
+.. code-block:: c++
+
+   class MyNodeObj : public Object {
+    public:
+     Array<Var> params;
+     Array<ObjectRef> body;
+
+     bool SEqual(const MyNodeObj* other,
+                 ffi::TypedFunction<bool(AnyView, AnyView, bool, AnyView)> cmp) const {
+       if (!cmp(params, other->params, /*def_region=*/true, "params")) return false;
+       if (!cmp(body, other->body, /*def_region=*/false, "body")) return false;
+       return true;
+     }
+
+     int64_t SHash(int64_t init_hash,
+                   ffi::TypedFunction<int64_t(AnyView, int64_t, bool)> hash) const {
+       int64_t h = hash(params, init_hash, /*def_region=*/true);
+       h = hash(body, h, /*def_region=*/false);
+       return h;
+     }
+
+     static void RegisterReflection() {
+       namespace refl = tvm::ffi::reflection;
+       refl::ObjectDef<MyNodeObj>()
+           .def_ro("params", &MyNodeObj::params)
+           .def_ro("body", &MyNodeObj::body);
+       refl::TypeAttrDef<MyNodeObj>()
+           .def(refl::type_attr::kSEqual, &MyNodeObj::SEqual)
+           .def(refl::type_attr::kSHash, &MyNodeObj::SHash);
+     }
+
+     static constexpr TVMFFISEqHashKind _type_s_eq_hash_kind = kTVMFFISEqHashKindTreeNode;
+     TVM_FFI_DECLARE_OBJECT_INFO_FINAL("my.Node", MyNodeObj, Object);
+   };
+
+See :cpp:var:`tvm::ffi::reflection::type_attr::kSEqual` and
+:cpp:var:`tvm::ffi::reflection::type_attr::kSHash` in
+``include/tvm/ffi/reflection/accessor.h`` for the full reference.
 
 
 All Kinds at a Glance
