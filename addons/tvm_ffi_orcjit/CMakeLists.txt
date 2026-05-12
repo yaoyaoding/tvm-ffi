@@ -38,8 +38,16 @@ find_package(tvm_ffi CONFIG REQUIRED)
 
 # ---- Build shared library ----
 add_library(
-  tvm_ffi_orcjit SHARED src/ffi/orcjit_session.cc src/ffi/orcjit_dylib.cc
-                        src/ffi/orcjit_memory_manager.cc
+  tvm_ffi_orcjit SHARED
+  src/ffi/orcjit_session.cc
+  src/ffi/orcjit_dylib.cc
+  src/ffi/orcjit_memory_manager.cc
+  src/ffi/orcjit_slab.cc
+  src/ffi/llvm_patches/gotpcrelx_fix.cc
+  src/ffi/llvm_patches/init_fini_plugin.cc
+  src/ffi/llvm_patches/macho_cxa_atexit_shim.cc
+  src/ffi/llvm_patches/win_coff_pdata_strip.cc
+  src/ffi/llvm_patches/win_dll_import_generator.cc
 )
 set_target_properties(
   tvm_ffi_orcjit PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON
@@ -145,25 +153,25 @@ elseif (UNIX AND NOT WIN32)
 endif ()
 
 # ---- Find and bundle liborc_rt ----
+# Platform notes:
+#
+# * Linux: liborc_rt is used for ExecutorNativePlatform → ELFNixPlatform.
+# * macOS: MachOPlatform is skipped to sidestep the compact-unwind delta bug (see
+#   src/ffi/orcjit_session.cc); liborc_rt is unused.
+# * Windows: COFFPlatform is not hooked up; liborc_rt is unused.
 set(ORC_RT_PATH "")
-if (DEFINED ENV{ORC_RT_PATH})
-  set(ORC_RT_PATH "$ENV{ORC_RT_PATH}")
-else ()
-  if (WIN32)
-    file(GLOB_RECURSE _orc_rt_candidates "${_llvm_prefix}/lib/clang/*/lib/orc_rt*.lib")
-    if (NOT _orc_rt_candidates)
-      file(GLOB_RECURSE _orc_rt_candidates "${_llvm_prefix}/Library/lib/clang/*/lib/orc_rt*.lib")
-    endif ()
+if (NOT APPLE AND NOT WIN32)
+  if (DEFINED ENV{ORC_RT_PATH})
+    set(ORC_RT_PATH "$ENV{ORC_RT_PATH}")
   else ()
     file(GLOB_RECURSE _orc_rt_candidates "${_llvm_prefix}/lib/clang/*/lib/liborc_rt*.a")
+    if (_orc_rt_candidates)
+      list(GET _orc_rt_candidates 0 ORC_RT_PATH)
+    endif ()
   endif ()
-  if (_orc_rt_candidates)
-    list(GET _orc_rt_candidates 0 ORC_RT_PATH)
+  if (NOT ORC_RT_PATH)
+    message(WARNING "Could not find liborc_rt. ORC runtime features will be disabled.")
   endif ()
-endif ()
-
-if (NOT ORC_RT_PATH)
-  message(WARNING "Could not find liborc_rt. ORC runtime features will be disabled.")
 endif ()
 
 if (ORC_RT_PATH)

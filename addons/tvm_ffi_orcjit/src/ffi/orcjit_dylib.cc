@@ -45,6 +45,23 @@ namespace tvm {
 namespace ffi {
 namespace orcjit {
 
+namespace {
+// When JIT thunks start reading their ctx/handle arg, grow this wrapper with
+// a DylibFnContext prefix whose first field is the thunk pointer, and flip
+// `safe_call` at a slab-emitted redirect that dispatches via ctx[0]. Example:
+//
+//     struct DylibFnContext { TVMFFISafeCallType fn; /* + closure fields */ };
+//     struct DylibFnContextWithModule {
+//       DylibFnContext ctx;  // first — pointer-interconvertible with wrapper
+//       Module module_ref;
+//     };
+struct DylibFnContextWithModule {
+  Module module_ref;  // keeps the owning dylib (and its slab) alive
+};
+
+void DeleteDylibFnContextWithModule(void* p) { delete static_cast<DylibFnContextWithModule*>(p); }
+}  // namespace
+
 ORCJITDynamicLibraryObj::ORCJITDynamicLibraryObj(ORCJITExecutionSession session,
                                                  llvm::orc::JITDylib* dylib, llvm::orc::LLJIT* jit,
                                                  String name)
@@ -62,15 +79,29 @@ ORCJITDynamicLibraryObj::ORCJITDynamicLibraryObj(ORCJITExecutionSession session,
 }
 
 ORCJITDynamicLibraryObj::~ORCJITDynamicLibraryObj() {
-  // See InitFiniPlugin class doc in orcjit_session.cc for the three-platform
-  // init/fini strategy (macOS native vs. Linux/Windows plugin).
-#if defined(__linux__) || defined(_WIN32)
+  // Step 1: run static destructors for code in this JITDylib via our
+  // InitFiniPlugin (uniform across Linux / macOS / Windows — see the
+  // plugin docstring in llvm_patches/init_fini_plugin.h).
   session_->RunPendingDeinitializers(GetJITDylib());
-#else
-  if (auto err = jit_->deinitialize(*dylib_)) {
-    llvm::consumeError(std::move(err));
-  }
+#ifdef __APPLE__
+  // Step 1b (macOS only): drain per-dylib __cxa_atexit registrations in
+  // LIFO.  Clang on Darwin lowers __attribute__((destructor)) and C++
+  // global dtors as __cxa_atexit(fn, arg, &__dso_handle) registrations
+  // during init; the shim in llvm_patches/macho_cxa_atexit_shim.cc
+  // captured them into cxa_atexit_records_ via the TLS pointer
+  // published by the GetSymbol-time scope.
+  DrainCxaAtexit(cxa_atexit_records_);
 #endif
+  // Step 2: remove the JITDylib from the ExecutionSession. Triggers
+  // JITDylib::clear(), which releases all tracked linker resources — in
+  // particular, invokes the ObjectLinkingLayer's ResourceManager which calls
+  // our memory manager's deallocate() for every FinalizedAlloc belonging to
+  // this dylib.  Without this call JIT code pages accumulate in the arena
+  // until the whole session is destroyed.  No Platform is registered in any
+  // of our LLJIT configurations (see orcjit_session.cc), so there is no
+  // Platform::teardownJITDylib callback to worry about.
+  session_->RemoveDylib(dylib_);
+  dylib_ = nullptr;
 }
 
 void ORCJITDynamicLibraryObj::AddObjectFile(const String& path) {
@@ -113,23 +144,19 @@ void* ORCJITDynamicLibraryObj::GetSymbol(const String& name) {
   auto symbol_or_err =
       jit_->getExecutionSession().lookup(search_order, jit_->mangleAndIntern(name.c_str()));
 
-  // Run pending initializers. Both paths are idempotent and support incremental
-  // loading (new object files added between GetSymbol calls).
-  // See InitFiniPlugin class doc in orcjit_session.cc for three-platform strategy.
-#if defined(__linux__) || defined(_WIN32)
-  // Linux/Windows: RunPendingInitializers drains and erases the map entry;
-  // subsequent calls are no-ops until new object files add fresh entries.
-  session_->RunPendingInitializers(GetJITDylib());
-#else
-  // macOS: LLJIT tracks an InitializedDylib set (LLJIT.h:624). First call
-  // invokes dlopen (refcount 0→1, runs initializers). Subsequent calls
-  // invoke dlupdate (no refcount bump, runs only new initializers from
-  // newly-added object files). The single deinitialize() in the destructor
-  // calls dlclose (refcount 1→0), so the count stays balanced.
-  if (auto err = jit_->initialize(*dylib_)) {
-    llvm::consumeError(std::move(err));
-  }
+  // Run pending initializers via InitFiniPlugin.  RunPendingInitializers
+  // drains and erases the map entry; subsequent calls are no-ops until new
+  // object files add fresh entries — supports incremental loading.
+  //
+  // On macOS the scope publishes this dylib's __cxa_atexit records vector
+  // so the ___cxa_atexit shim (see orcjit_session.cc) can route dtor
+  // registrations here for our destructor to drain.  Static init on C
+  // and C++ code typically happens here (first GetSymbol resolves the
+  // `main` entry point, which materializes and fires __mod_init_func).
+#ifdef __APPLE__
+  CxaAtexitRecordsScope scope(&cxa_atexit_records_);
 #endif
+  session_->RunPendingInitializers(GetJITDylib());
   // Convert ExecutorAddr to pointer
   return symbol_or_err ? symbol_or_err->getAddress().toPtr<void*>() : nullptr;
 }
@@ -159,16 +186,9 @@ Optional<Function> ORCJITDynamicLibraryObj::GetFunction(const String& name) {
 
   // Try to get the symbol - return NullOpt if not found
   if (void* symbol = GetSymbol(symbol_name)) {
-    // Wrap C function pointer as tvm-ffi Function.
-    // Capture a strong self-ref so the module (and its JIT code pages) stays
-    // alive as long as the returned Function is alive.
     TVMFFISafeCallType c_func = reinterpret_cast<TVMFFISafeCallType>(symbol);
-    Module self_strong_ref = GetRef<Module>(this);
-    return Function::FromPacked([c_func, self_strong_ref](PackedArgs args, Any* rv) {
-      TVM_FFI_ICHECK_LT(rv->type_index(), ffi::TypeIndex::kTVMFFIStaticObjectBegin);
-      TVM_FFI_CHECK_SAFE_CALL((*c_func)(nullptr, reinterpret_cast<const TVMFFIAny*>(args.data()),
-                                        args.size(), reinterpret_cast<TVMFFIAny*>(rv)));
-    });
+    auto* wrapper = new DylibFnContextWithModule{GetRef<Module>(this)};
+    return Function::FromExternC(wrapper, c_func, DeleteDylibFnContextWithModule);
   }
   return std::nullopt;
 }
@@ -188,12 +208,16 @@ static void RegisterOrcJITFunctions() {
 
   refl::GlobalDef()
       .def("orcjit.ExecutionSession",
-           [](const std::string& orc_rt_path, int64_t arena_size_bytes) {
-             return ORCJITExecutionSession(orc_rt_path, arena_size_bytes);
+           [](const std::string& orc_rt_path, int64_t slab_size_bytes) {
+             return ORCJITExecutionSession(orc_rt_path, slab_size_bytes);
            })
       .def("orcjit.ExecutionSessionCreateDynamicLibrary",
            [](const ORCJITExecutionSession& session, const String& name) -> Module {
              return session->CreateDynamicLibrary(name);
+           })
+      .def("orcjit.ExecutionSessionClearFreeSlabs",
+           [](const ORCJITExecutionSession& session) -> int64_t {
+             return session->ClearFreeSlabs();
            });
 }
 
