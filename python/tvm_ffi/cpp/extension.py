@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import logging
 import os
 import shutil
 import subprocess
@@ -35,6 +36,8 @@ from tvm_ffi.utils import FileLock
 
 IS_WINDOWS = sys.platform == "win32"
 BACKEND_STR = Literal["cuda", "hip"]
+
+logger = logging.getLogger(__name__)
 
 
 @functools.lru_cache
@@ -590,15 +593,21 @@ def build_ninja(build_dir: str) -> None:
         status = _run_command_in_dev_prompt(args=command, cwd=build_dir, capture_output=True)
     else:
         status = subprocess.run(check=False, args=command, cwd=build_dir, capture_output=True)
+    encoding = "oem" if IS_WINDOWS else "utf-8"
     if status.returncode != 0:
         msg = [f"ninja exited with status {status.returncode}"]
-        encoding = "oem" if IS_WINDOWS else "utf-8"
         if status.stdout:
             msg.append(f"stdout:\n{status.stdout.decode(encoding)}")
         if status.stderr:
             msg.append(f"stderr:\n{status.stderr.decode(encoding)}")
 
         raise RuntimeError("\n".join(msg))
+
+    LOG_BUILD = os.environ.get("TVM_FFI_CPP_EXTENSION_LOG_BUILD", "0")
+    if LOG_BUILD in ("1", "stdout"):
+        logger.info("ninja build stdout:\n%s", status.stdout.decode(encoding))
+    if LOG_BUILD in ("1", "stderr"):
+        logger.info("ninja build stderr:\n%s", status.stderr.decode(encoding))
 
 
 # Translation table for escaping C++ string literals
