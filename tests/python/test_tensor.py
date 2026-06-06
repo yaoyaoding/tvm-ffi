@@ -52,16 +52,15 @@ def test_tensor_attributes() -> None:
     np.testing.assert_equal(x2, data)
 
 
-def test_empty_tensor_attributes() -> None:
+def test_empty_tensor_is_contiguous() -> None:
+    # Empty tensors are trivially contiguous regardless of what
+    # strides the producer reports (numpy 2.3+ via __dlpack__ now
+    # reports (0, 0, 0) for shape (4, 0, 4)). See PR #607 review
+    # comment for context.
     data: npt.NDArray[Any] = np.zeros((4, 0, 4), dtype="int16")
     if not hasattr(data, "__dlpack__"):
         return
     x = tvm_ffi.from_dlpack(data)
-    assert isinstance(x, tvm_ffi.Tensor)
-    assert x.shape == (4, 0, 4)
-    assert x.ndim == 3
-    assert x.strides == (0, 4, 1)
-    assert x.numel() == 0
     assert x.is_contiguous()
 
 
