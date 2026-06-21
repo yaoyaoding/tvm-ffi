@@ -126,6 +126,9 @@ class TypeTable {
     if (it != type_key2index_.end()) {
       return type_table_[(*it).second]->type_index;
     }
+    if (parent_type_index == -2) {
+      return -2;
+    }
 
     // get parent's entry
     Entry* parent = [&]() -> Entry* {
