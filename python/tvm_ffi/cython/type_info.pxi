@@ -116,6 +116,8 @@ _TYPE_SCHEMA_ORIGIN_CONVERTER = {
     "ObjectRValueRef": "Object",
 }
 
+cdef str _TYPE_ATTR_FFI_CONVERT_TYPE_SCHEMA = "__ffi_convert_type_schema__"
+
 # Sentinel for structural types (Optional, Union) that have no single type_index
 _ORIGIN_TYPE_INDEX_STRUCTURAL = -2
 # Sentinel for unknown/unresolved origins
@@ -216,6 +218,19 @@ class TypeSchema:
 
     def __repr__(self) -> str:
         return self.repr(ty_map=None)
+
+    @staticmethod
+    def _from_maybe_json(raw: object) -> "TypeSchema":
+        """Construct a TypeSchema from a TypeSchema, JSON string, or JSON dict."""
+        if isinstance(raw, TypeSchema):
+            return raw
+        if isinstance(raw, str):
+            return TypeSchema.from_json_str(raw)
+        if isinstance(raw, dict):
+            return TypeSchema.from_json_obj(raw)
+        raise TypeError(
+            f"expected TypeSchema, JSON string, or JSON dict, got {type(raw).__name__}"
+        )
 
     @staticmethod
     def from_json_obj(obj: dict[str, Any]) -> "TypeSchema":
@@ -517,12 +532,40 @@ class TypeSchema:
             assert s.repr() == "Array[int]"
 
         """
-        if ty_map is None:
-            origin = self.origin
-        else:
-            origin = ty_map(self.origin)
+        return self.output_repr(ty_map)
+
+    def input_repr(self, ty_map: "Optional[Callable[[str], str]]" = None) -> str:
+        """Render the Python input annotation accepted by this schema."""
+        return self._repr_impl(ty_map, input_mode=True, expanded_convert_types=frozenset())
+
+    def output_repr(self, ty_map: "Optional[Callable[[str], str]]" = None) -> str:
+        """Render the precise Python output annotation produced by this schema."""
+        return self._repr_impl(ty_map, input_mode=False, expanded_convert_types=frozenset())
+
+    def _repr_impl(
+        self,
+        ty_map: "Optional[Callable[[str], str]]",
+        input_mode: bool,
+        expanded_convert_types: "frozenset[int]",
+    ) -> str:
+        if input_mode and self.origin_type_index >= kTVMFFIStaticObjectBegin:
+            if self.origin_type_index not in expanded_convert_types:
+                raw_convert_schema = _lookup_type_attr(
+                    self.origin_type_index, _TYPE_ATTR_FFI_CONVERT_TYPE_SCHEMA
+                )
+                if raw_convert_schema is not None:
+                    return TypeSchema._from_maybe_json(raw_convert_schema)._repr_impl(
+                        ty_map,
+                        input_mode=True,
+                        expanded_convert_types=expanded_convert_types | {self.origin_type_index},
+                    )
+
+        origin = self.origin if ty_map is None else ty_map(self.origin)
         schema_args = self.args
-        args = [i.repr(ty_map) for i in (() if schema_args is None else schema_args)]
+        args = [
+            i._repr_impl(ty_map, input_mode, expanded_convert_types)
+            for i in (() if schema_args is None else schema_args)
+        ]
         if origin == "Union":
             return " | ".join(args)
         elif origin == "Optional":
@@ -1129,8 +1172,8 @@ cdef _register_py_methods(int32_t type_index, list py_methods, frozenset type_at
     ----------
     type_index : int
         The runtime type index of the type.
-    py_methods : list[tuple[str, Any, bool]]
-        Each entry is ``(name, value, is_static)``.
+    py_methods : list[tuple[str, Any, bool, str | None]]
+        Each entry is ``(name, value, is_static, metadata_json)``.
     type_attr_names : frozenset[str]
         Names to register as TypeAttrColumn instead of TypeMethod.
     """
@@ -1139,11 +1182,12 @@ cdef _register_py_methods(int32_t type_index, list py_methods, frozenset type_at
     cdef TVMFFIAny sentinel_any
     cdef int c_api_ret_code
     cdef ByteArrayArg name_arg
+    cdef ByteArrayArg metadata_arg
 
     sentinel_any.type_index = kTVMFFINone
     sentinel_any.v_int64 = 0
 
-    for name, func, is_static in py_methods:
+    for name, func, is_static, metadata_json in py_methods:
         func_any.type_index = kTVMFFINone
         func_any.v_int64 = 0
         try:
@@ -1169,8 +1213,13 @@ cdef _register_py_methods(int32_t type_index, list py_methods, frozenset type_at
                 method_info.doc.size = 0
                 method_info.flags = kTVMFFIFieldFlagBitMaskIsStaticMethod if is_static else 0
                 method_info.method = func_any
-                method_info.metadata.data = NULL
-                method_info.metadata.size = 0
+                if metadata_json is not None:
+                    metadata_bytes = c_str(metadata_json)
+                    metadata_arg = ByteArrayArg(metadata_bytes)
+                    method_info.metadata = metadata_arg.cdata
+                else:
+                    method_info.metadata.data = NULL
+                    method_info.metadata.size = 0
                 CHECK_CALL(TVMFFITypeRegisterMethod(type_index, &method_info))
         finally:
             if func_any.type_index >= kTVMFFIStaticObjectBegin and func_any.v_obj != NULL:

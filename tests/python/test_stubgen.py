@@ -16,11 +16,15 @@
 # under the License.
 from __future__ import annotations
 
+import itertools
+import typing
 from pathlib import Path
 
 import pytest
 import tvm_ffi.stub.cli as stub_cli
+from tvm_ffi import Object, method
 from tvm_ffi.core import TypeSchema
+from tvm_ffi.dataclasses import py_class
 from tvm_ffi.stub import consts as C
 from tvm_ffi.stub.cli import _stage_2, _stage_3
 from tvm_ffi.stub.file_utils import CodeBlock, FileInfo
@@ -35,21 +39,30 @@ from tvm_ffi.stub.python_generator.codegen import (
     generate_python_init,
     generate_python_object,
     render_func_signature,
+    render_object_ffi_init,
     render_object_fields,
+    render_object_init,
     render_object_methods,
 )
 from tvm_ffi.stub.python_generator.utils import ImportItem
 from tvm_ffi.stub.utils import (
     FuncInfo,
     InitConfig,
+    InitFieldInfo,
     NamedTypeSchema,
     ObjectInfo,
     Options,
 )
 
+_counter = itertools.count()
+
 
 def _identity_ty_map(name: str) -> str:
     return name
+
+
+def _unique_type_key(base: str) -> str:
+    return f"testing.stubgen.{base}_{next(_counter)}"
 
 
 def _default_ty_map() -> dict[str, str]:
@@ -58,6 +71,10 @@ def _default_ty_map() -> dict[str, str]:
 
 def _type_suffix(name: str) -> str:
     return PC.TY_MAP_DEFAULTS.get(name, name).rsplit(".", 1)[-1]
+
+
+def _input_type_suffix(name: str) -> str:
+    return PC.TY_MAP_INPUT_DEFAULTS.get(name, PC.TY_MAP_DEFAULTS.get(name, name)).rsplit(".", 1)[-1]
 
 
 def test_codeblock_from_begin_line_variants() -> None:
@@ -298,6 +315,126 @@ def test_objectinfo_gen_fields_container_types() -> None:
         "lst: MutableSequence[str]",
         "mp: Mapping[str, int]",
         "dt: MutableMapping[str, float]",
+    ]
+
+
+def test_funcinfo_gen_uses_input_annotations_for_parameters() -> None:
+    info = FuncInfo(
+        schema=NamedTypeSchema(
+            "demo.echo_list",
+            TypeSchema(
+                "Callable",
+                (
+                    TypeSchema("List", (TypeSchema("int"),)),
+                    TypeSchema("List", (TypeSchema("int"),)),
+                ),
+            ),
+        ),
+        is_member=False,
+    )
+
+    assert (
+        render_func_signature(info, _type_suffix, indent=0, input_ty_map=_input_type_suffix)
+        == "def echo_list(_0: Sequence[int], /) -> MutableSequence[int]: ..."
+    )
+
+
+def test_generate_global_funcs_populates_input_defaults_for_partial_ty_map() -> None:
+    code = CodeBlock(
+        kind="global",
+        param=("demo", "mockpkg"),
+        lineno_start=1,
+        lineno_end=2,
+        lines=[f"{C.PYTHON_SYNTAX.begin} global/demo@mockpkg", C.PYTHON_SYNTAX.end],
+    )
+    funcs = [
+        FuncInfo(
+            schema=NamedTypeSchema(
+                "demo.echo_list",
+                TypeSchema(
+                    "Callable",
+                    (
+                        TypeSchema("List", (TypeSchema("int"),)),
+                        TypeSchema("List", (TypeSchema("int"),)),
+                    ),
+                ),
+            ),
+            is_member=False,
+        )
+    ]
+    imports: list[ImportItem] = []
+
+    generate_python_global_funcs(
+        code, funcs, {"List": "collections.abc.MutableSequence"}, imports, Options()
+    )
+
+    assert code.lines == [
+        f"{C.PYTHON_SYNTAX.begin} global/demo@mockpkg",
+        "# fmt: off",
+        '_FFI_INIT_FUNC("demo", __name__)',
+        "if TYPE_CHECKING:",
+        "    def echo_list(_0: Sequence[int], /) -> MutableSequence[int]: ...",
+        "# fmt: on",
+        C.PYTHON_SYNTAX.end,
+    ]
+
+
+def test_objectinfo_gen_init_uses_input_annotations() -> None:
+    info = ObjectInfo(
+        fields=[NamedTypeSchema("items", TypeSchema("List", (TypeSchema("int"),)))],
+        methods=[],
+        init_fields=[
+            InitFieldInfo(
+                name="items",
+                schema=NamedTypeSchema("items", TypeSchema("List", (TypeSchema("int"),))),
+                kw_only=False,
+                has_default=False,
+            )
+        ],
+        has_init=True,
+    )
+
+    assert render_object_fields(info, _type_suffix, indent=0) == ["items: MutableSequence[int]"]
+    assert render_object_init(info, _type_suffix, indent=0, input_ty_map=_input_type_suffix) == [
+        "def __init__(self, items: Sequence[int]) -> None: ..."
+    ]
+    assert render_object_ffi_init(
+        info, _type_suffix, indent=0, input_ty_map=_input_type_suffix
+    ) == [
+        "def __ffi_init__(self, items: Sequence[int]) -> None: ...  # ty: "
+        "ignore[invalid-method-override]"
+    ]
+
+
+def test_py_class_method_metadata_renders_stub_signature() -> None:
+    @py_class(_unique_type_key("MethodMetadata"))
+    class MethodMetadata(Object):
+        value: int
+
+        @method
+        def describe(self, values: typing.List[int], prefix: str) -> str:  # noqa: UP006
+            return f"{prefix}:{self.value}:{len(values)}"
+
+        @method
+        @staticmethod
+        def normalize(values: typing.List[int]) -> typing.List[int]:  # noqa: UP006
+            return values
+
+    info = ObjectInfo.from_type_info(MethodMetadata.__tvm_ffi_type_info__)  # ty: ignore[unresolved-attribute]
+    methods = {method.schema.name: method for method in info.methods}
+    describe_schema = methods["describe"].schema
+
+    assert describe_schema.origin == "Callable"
+    assert [arg.origin for arg in describe_schema.args] == [
+        "str",
+        MethodMetadata.__tvm_ffi_type_info__.type_key,  # ty: ignore[unresolved-attribute]
+        "List",
+        "str",
+    ]
+    assert render_object_methods(info, _type_suffix, indent=0, input_ty_map=_input_type_suffix) == [
+        "def describe(self, _1: Sequence[int], _2: str, /) -> str: ...",
+        "@staticmethod",
+        "def normalize(_0: Sequence[int], /) -> MutableSequence[int]: ...",
     ]
 
 
